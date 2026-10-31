@@ -1,0 +1,11 @@
+{
+  "name": "interccom",
+  "owner": { "name": "interccom contributors" },
+  "plugins": [
+    {
+      "name": "interccom",
+      "source": "./",
+      "description": "One voice for all your Claude Code sessions: hear conclusions and questions, talk back hands-free."
+    }
+  ]
+}

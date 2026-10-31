@@ -1,0 +1,9 @@
+{
+  "name": "interccom",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=18.3" },
+  "scripts": {
+    "test": "node --experimental-strip-types --test \"tests/**/*.test.mjs\" \"tests/**/*.test.ts\""
+  }
+}

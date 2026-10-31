@@ -1,0 +1,103 @@
+// Hub entry point: node hub/main.mjs [--state-dir <dir>]
+// Writes <stateDir>/hub.json { port, token, pid } once listening.
+// The API key arrives only via POST /config from sessions.
+import { spawn } from 'node:child_process'
+import { randomBytes, randomUUID } from 'node:crypto'
+import { appendFileSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
+import { mkdir, rm, writeFile } from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
+import { parseArgs } from 'node:util'
+import { createHub } from './server.mjs'
+import { tts, stt, EngineError } from './engines/elevenlabs.mjs'
+import { playArgv, playOutcome, listMics } from './audio/windows.mjs'
+import { createListenerManager } from './listener.mjs'
+import { createVad } from './vad.mjs'
+import { pcmToWav } from './wav.mjs'
+
+const { values } = parseArgs({ options: { 'state-dir': { type: 'string' } } })
+const stateDir = values['state-dir'] || path.join(os.homedir(), '.interccom')
+const hubFile = path.join(stateDir, 'hub.json')
+const token = randomBytes(24).toString('hex')
+
+// Security: on Windows a bare-name spawn ('ffplay') searches the current
+// directory before PATH, and this detached hub may inherit an untrusted
+// project folder as its cwd. Move into our own state dir so a planted
+// ffplay.exe in a project can never run; spawns also pass cwd explicitly.
+mkdirSync(stateDir, { recursive: true })
+process.chdir(stateDir)
+if (process.env.INTERCCOM_TEST_LOG) appendFileSync(process.env.INTERCCOM_TEST_LOG, `${process.pid}\n`)
+
+const NO_KEY = 'No ElevenLabs API key configured. Set it in /plugin settings for interccom or in ELEVENLABS_API_KEY.'
+
+const engines = {
+  tts(text, cfg) {
+    if (!cfg.apiKey) throw new EngineError('auth', NO_KEY)
+    return tts(text, { apiKey: cfg.apiKey, voiceId: cfg.voiceId, modelId: cfg.ttsModel })
+  },
+  stt(wav, cfg) {
+    if (!cfg.apiKey) throw new EngineError('auth', NO_KEY)
+    return stt(wav, { apiKey: cfg.apiKey, model: cfg.sttModel, language: cfg.sttLanguage })
+  },
+}
+
+const audio = {
+  async play(mp3, signal) {
+    if (signal.aborted) return
+    const dir = path.join(os.tmpdir(), 'interccom')
+    await mkdir(dir, { recursive: true })
+    const file = path.join(dir, `${randomUUID()}.mp3`)
+    await writeFile(file, mp3)
+    try {
+      // A /stop may have landed while we were writing the file.
+      if (signal.aborted) return
+      await new Promise((resolve, reject) => {
+        const [cmd, args] = playArgv(file)
+        const child = spawn(cmd, args, { stdio: ['ignore', 'ignore', 'pipe'], windowsHide: true, cwd: stateDir })
+        let stderr = ''
+        let settled = false
+        child.stderr?.on('data', d => { stderr = (stderr + d).slice(-1000) })
+        const kill = () => child.kill()
+        signal.addEventListener('abort', kill, { once: true })
+        if (signal.aborted) kill()
+        // A failure rejects, so the player's onError reports it to every session.
+        const finish = outcome => {
+          if (settled) return
+          settled = true
+          signal.removeEventListener('abort', kill)
+          const err = playOutcome({ ...outcome, aborted: signal.aborted, stderr })
+          if (err) reject(err)
+          else resolve()
+        }
+        child.on('error', error => finish({ error }))
+        child.on('close', code => finish({ code }))
+      })
+    } finally {
+      await rm(file, { force: true }).catch(() => {})
+    }
+  },
+}
+
+function removeHubFile() {
+  try {
+    if (JSON.parse(readFileSync(hubFile, 'utf8')).pid === process.pid) unlinkSync(hubFile)
+  } catch { /* gone or unreadable */ }
+}
+
+async function shutdown() {
+  removeHubFile()
+  listener.stop()
+  await hub.close().catch(() => {})
+  process.exit(0)
+}
+
+const hub = createHub({ token, engines, audio, onIdleExit: shutdown })
+const listener = createListenerManager({ hub, listMics, stt, pcmToWav, createVad })
+listener.start() // follows /config and /listen changes from here on
+const { port } = await hub.listen(0)
+// Atomic write: readers never see a half-written hub.json.
+const tmpFile = path.join(stateDir, `hub.json.${process.pid}.tmp`)
+writeFileSync(tmpFile, JSON.stringify({ port, token, pid: process.pid }), { mode: 0o600 })
+renameSync(tmpFile, hubFile)
+process.on('SIGINT', shutdown)
+process.on('SIGTERM', shutdown)

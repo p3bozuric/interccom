@@ -1,0 +1,46 @@
+{
+  "name": "interccom",
+  "version": "0.1.0",
+  "description": "One voice for all your Claude Code sessions: hear conclusions and questions, talk back hands-free.",
+  "license": "MIT",
+  "userConfig": {
+    "elevenlabs_api_key": {
+      "type": "string",
+      "title": "ElevenLabs API key",
+      "description": "Your ElevenLabs API key. Falls back to the ELEVENLABS_API_KEY environment variable.",
+      "sensitive": true
+    },
+    "voice_id": {
+      "type": "string",
+      "title": "ElevenLabs voice ID",
+      "description": "Which voice speaks.",
+      "default": "21m00Tcm4TlvDq8ikWAM"
+    },
+    "tts_model": {
+      "type": "string",
+      "title": "ElevenLabs model",
+      "description": "TTS model; flash is the lowest latency.",
+      "default": "eleven_flash_v2_5",
+      "options": ["eleven_flash_v2_5", "eleven_turbo_v2_5", "eleven_multilingual_v2"]
+    },
+    "stt_language": {
+      "type": "string",
+      "title": "Speech language",
+      "description": "Language code for transcription (en, hr, ...), or auto to detect.",
+      "default": "en"
+    },
+    "listen_mode": {
+      "type": "string",
+      "title": "Listening mode",
+      "description": "always: everything you say is sent. wake: only speech starting with \"hey Claude\". off: no mic.",
+      "default": "wake",
+      "options": ["always", "wake", "off"]
+    },
+    "muted": {
+      "type": "boolean",
+      "title": "Muted",
+      "description": "Keep the speak tool but play nothing.",
+      "default": false
+    }
+  }
+}
