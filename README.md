@@ -26,7 +26,7 @@ Speech can run in the cloud (ElevenLabs, Deepgram, Soniox, OpenAI, Groq, Cartesi
   - If Claude is idle, it arrives as your next message.
   - If Claude is mid-task, it's attached to Claude's next step, so Claude can change course right away.
 
-## Other coding agents: Codex, Copilot CLI, OpenCode
+## Other coding agents: Codex, Copilot CLI, OpenCode, Gemini CLI
 
 Sessions of every supported agent share one voice channel: one voice at a time, addressable by name ("Hey Claude, *api*: …", whatever the agent), all on the same board. With a coordinator running, they report to it.
 
@@ -36,6 +36,7 @@ Sessions of every supported agent share one voice channel: one voice at a time, 
 | Codex CLI 0.166+ | `codex plugin marketplace add p3bozuric/interccom`, then `codex plugin add interccom` | hooks + `codex queue` |
 | GitHub Copilot CLI 1.0+ | `npx -y interccom copilot-setup` | in-process extension |
 | OpenCode 1.19+ | `npx -y interccom opencode-setup` | in-process plugin |
+| Gemini CLI (with hooks) | `npx -y interccom gemini-setup`, then `gemini extensions link <the folder it prints>` | hooks; idle speech waits for your next message |
 | Any other MCP agent | add `interccom mcp` as an MCP server | speaks only, can't hear yet |
 
 Until the npm package is published, run the same commands from a clone: `node path/to/interccom/hub/cli.mjs copilot-setup`.
@@ -43,6 +44,7 @@ Until the npm package is published, run the same commands from a clone: `node pa
 - **Setup commands:**
   - `copilot-setup` writes `~/.copilot/extensions/interccom/extension.mjs`.
   - `opencode-setup` writes `~/.config/opencode/plugins/interccom.js`.
+  - `gemini-setup` writes a Gemini extension (an MCP server and hooks) to `~/.interccom/gemini/interccom`, for `gemini extensions link`.
   - Each is a few lines that load interccom from wherever it's installed, so updating interccom needs no new setup. `--print` shows the file without writing it, and `--remove` deletes it. Neither command ever overwrites a file interccom didn't write.
 - **Settings:** these agents have no interccom settings screen. Run `interccom setup` once (see [Setup](#setup)), or set `INTERCCOM_*` environment variables. The hub uses the settings of whichever session connected most recently.
 - **Node.js:** the hub always runs on Node, even inside OpenCode (a Bun program) or Copilot. interccom finds `node` on PATH; set `INTERCCOM_NODE` if it's elsewhere.
@@ -74,6 +76,16 @@ The plugin runs inside the OpenCode server:
 - speech heard while idle is sent to the session you last used. Subagent sessions are ignored.
 
 OpenCode installs the `@opencode-ai/plugin` package the plugin needs by itself. Restart OpenCode after setup.
+
+### Gemini CLI
+
+The extension gives Gemini the `speak` and `board` tools and four hooks:
+- at the start of a session, the speaking guidance;
+- before each turn, speech that came in while Gemini was idle;
+- after each tool, speech heard mid-turn;
+- at the end of a turn, speech heard just then, which keeps the turn going.
+
+Gemini can't be started from outside, so speech heard while it's idle waits and goes in with your next message there; interccom says so. Run `gemini extensions link` in a terminal, not inside Gemini, then restart Gemini. Gemini asks you to trust new hooks the first time.
 
 ## Requirements
 
@@ -228,7 +240,7 @@ Set `INTERCCOM_MIC` to a device name to choose a specific microphone; otherwise 
 
 ## Roadmap
 
-- **More coding agents:** Gemini CLI and others hearing too, and a coordinator in agents other than Claude Code ([design](docs/superpowers/specs/2026-11-01-interccom-hosts.md)).
+- **More coding agents:** others hearing too, and a coordinator in agents other than Claude Code ([design](docs/superpowers/specs/2026-11-01-interccom-hosts.md)).
 - **Setup:** a `/interccom setup` guide and a mic picker.
 - **Claude Code desktop app and phone:** the PC goes quiet when you're on your phone.
 

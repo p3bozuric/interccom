@@ -1,9 +1,9 @@
 // interccom for agents other than Claude Code: a stdio MCP server with `speak` and `board`.
-//   interccom mcp [--host codex] [--name <name>] [--cwd <dir>]
+//   interccom mcp [--host codex|gemini] [--name <name>] [--cwd <dir>]
 // The process lives as long as the agent's session, so it is that session's link to the hub:
 // it starts the hub if needed, registers, keeps the event stream open and reconnects.
-// With --host codex, heard speech waits in the hub for the Codex hooks (interccom codex-hook);
-// any other host can speak but not hear yet. stdout carries only JSON-RPC; logs go to stderr.
+// With --host codex or gemini, heard speech waits in the hub for that agent's hooks
+// (interccom codex-hook / gemini-hook); any other host can speak but not hear yet. stdout carries only JSON-RPC; logs go to stderr.
 import os from 'node:os'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
@@ -15,7 +15,7 @@ import { hostGuidance, genericInstructions } from './hosts/text.mjs'
 export const PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05']
 const PRIORITIES = ['question', 'heads-up', 'status']
 // Hosts whose hooks drain the hub's inbox. Everything else is speak-only for now.
-const PULL_HOSTS = new Set(['codex'])
+const PULL_HOSTS = new Set(['codex', 'gemini'])
 
 export const TOOLS = [
   {

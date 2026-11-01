@@ -49,3 +49,44 @@ test('normWords and samePath', () => {
   assert.ok(samePath('/w/cx/', '/w/cx', 'linux'))
   assert.ok(!samePath('', '', 'linux'))
 })
+
+import { GEMINI_EVENTS, geminiHookOutput, geminiExtensionFiles, geminiExtensionDir } from '../../hub/hosts/gemini.mjs'
+import { geminiSetup } from '../../hub/cli.mjs'
+
+test('gemini: events, hook output shapes, and the extension files', () => {
+  assert.deepEqual(GEMINI_EVENTS, { SessionStart: 'session-start', BeforeAgent: 'prompt', AfterTool: 'tool', AfterAgent: 'stop' })
+  assert.equal(geminiHookOutput('AfterTool', { context: 'note' }), '{"hookSpecificOutput":{"hookEventName":"AfterTool","additionalContext":"note"}}')
+  assert.equal(geminiHookOutput('BeforeAgent', {}), '{}')
+  assert.equal(geminiHookOutput('AfterAgent', { block: 'note' }), '{"decision":"deny","reason":"note"}')
+  assert.equal(geminiHookOutput('AfterAgent', {}), '{}')
+  const files = geminiExtensionFiles('/n/node', '/x y/hub/cli.mjs', '9.9.9')
+  const manifest = JSON.parse(files['gemini-extension.json'])
+  assert.equal(manifest.name, 'interccom')
+  assert.deepEqual(manifest.mcpServers.interccom, { command: '/n/node', args: ['/x y/hub/cli.mjs', 'mcp', '--host', 'gemini'] })
+  const hooks = JSON.parse(Object.entries(files).find(([f]) => f.endsWith('hooks.json'))[1]).hooks
+  assert.deepEqual(Object.keys(hooks), ['SessionStart', 'BeforeAgent', 'AfterTool', 'AfterAgent'])
+  assert.equal(hooks.AfterTool[0].matcher, '.*')
+  assert.equal(hooks.SessionStart[0].hooks[0].command, '"/n/node" "/x y/hub/cli.mjs" gemini-hook')
+  assert.match(geminiExtensionDir({ INTERCCOM_STATE_DIR: '/s' }), /[\\/]s[\\/]gemini[\\/]interccom$/)
+})
+
+test('gemini-setup writes, refuses someone else\'s folder, and removes', async () => {
+  const fs = await import('node:fs')
+  const os = await import('node:os')
+  const path = await import('node:path')
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'interccom-gemini-'))
+  try {
+    const env = { INTERCCOM_STATE_DIR: d }
+    assert.match(await geminiSetup({ env }), /gemini extensions link/)
+    const dir = geminiExtensionDir(env)
+    assert.ok(fs.existsSync(path.join(dir, 'hooks', 'hooks.json')))
+    assert.match(await geminiSetup({ env }), /Wrote/)
+    assert.match(await geminiSetup({ env, remove: true }), /Removed/)
+    assert.ok(!fs.existsSync(dir))
+    fs.mkdirSync(dir, { recursive: true })
+    fs.writeFileSync(path.join(dir, 'gemini-extension.json'), '{"name":"someone-else"}')
+    await assert.rejects(geminiSetup({ env }), /isn't interccom's/)
+  } finally {
+    fs.rmSync(d, { recursive: true, force: true })
+  }
+})
