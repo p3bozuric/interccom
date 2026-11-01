@@ -9,7 +9,7 @@ export class EngineError extends Error {
 }
 
 const MESSAGES = {
-  auth: 'ElevenLabs rejected the API key. Check it in /plugin settings for interccom or in ELEVENLABS_API_KEY.',
+  auth: 'ElevenLabs rejected the API key. Check elevenlabs_api_key (or ELEVENLABS_API_KEY).',
   quota: "ElevenLabs quota or rate limit reached. Check your plan's usage at elevenlabs.io.",
   network: "Couldn't reach ElevenLabs. Check your internet connection.",
   timeout: "ElevenLabs didn't answer in time. Check your connection.",
