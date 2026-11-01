@@ -9,6 +9,8 @@ const DENY = new Set(['deny', 'denied', 'reject', 'no', 'nope', 'no deny', 'deny
 const CONFIRM = new Set(['confirm', 'confirmed', 'yes confirm', 'i confirm', 'confirm it'])
 const YES = new Set(['yes', 'yeah', 'yep', 'sure', 'ok', 'okay'])
 const MAX_WORDS = 7
+// A folder name like "pull merged changes 2" takes several words; the router allows as many.
+const NAME_WORDS = 5
 
 // Deletes, force pushes, publishing, deploys, messages to people: read back, then "confirm".
 const DESTRUCTIVE = [
@@ -71,7 +73,7 @@ export function matchAnswer(text, open) {
   // A session name at either end: "approve api 2", "api 2 approve".
   let target
   let rest = w
-  for (let n = Math.min(3, w.length - 1); n >= 1 && !target; n--) {
+  for (let n = Math.min(NAME_WORDS, w.length - 1); n >= 1 && !target; n--) {
     const tail = normalizeName(w.slice(-n).join(' '))
     const head = normalizeName(w.slice(0, n).join(' '))
     const byTail = [...names.keys()].find(k => k === tail)

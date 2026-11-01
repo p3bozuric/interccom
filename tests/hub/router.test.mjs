@@ -37,3 +37,6 @@ test('armed and always modes also take a name', () => {
 // Accepted behavior: a session named like a common word takes utterances that start with it.
 test('a session named after a common word catches that word', () => assert.deepEqual(
   route('hey claude test the build', { ...base, names: ['test', 'api'] }), { kind: 'deliver', text: 'the build', name: 'test' }))
+test('a folder name of five spoken words', () => assert.deepEqual(
+  route('Hey Claude, pull merged changes 00f9eb two: status?', { ...base, names: ['pull-merged-changes-00f9eb', 'pull-merged-changes-00f9eb-2'] }),
+  { kind: 'deliver', text: 'status?', name: 'pull-merged-changes-00f9eb-2' }))

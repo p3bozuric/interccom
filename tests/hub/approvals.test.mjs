@@ -57,3 +57,10 @@ test('answers: "confirm" settles only a request waiting for it; "yes" never conf
   assert.equal(matchAnswer('yes', [C]), undefined)
   assert.deepEqual(matchAnswer('deny', [C]), { action: 'deny', id: 'c' })
 })
+
+test('answers: a folder name of up to five spoken words', () => {
+  const L = { id: 'l', name: 'pull-merged-changes-00f9eb', confirming: false }
+  const L2 = { id: 'l2', name: 'pull-merged-changes-00f9eb-2', confirming: false }
+  assert.deepEqual(matchAnswer('Approve pull merged changes 00f9eb 2.', [L, L2]), { action: 'approve', id: 'l2' })
+  assert.deepEqual(matchAnswer('pull merged changes 00f9eb, deny', [L, L2]), { action: 'deny', id: 'l' })
+})
