@@ -47,7 +47,7 @@ function readJson(req) {
   })
 }
 
-export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 30_000, onIdleExit = () => {}, startPaused = false, streamGraceMs = 15_000, pingMs = 30_000 }) {
+export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 30_000, onIdleExit = () => {}, startPaused = false, streamGraceMs = 15_000, pingMs = 30_000, debugHear = false }) {
   const board = new Board()
   const queue = new TalkQueue()
   const streams = new Map() // sessionId -> open events response
@@ -269,6 +269,13 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
       return { mode: config.listenMode }
     }
     if (m === 'POST' && path === '/stop') return { flushed: stop() }
+    // Testing aid, off unless the hub runs with INTERCCOM_DEBUG_HEAR=1: a typed line goes
+    // through the same routing as a transcript, so routing can be tested without a mic.
+    if (m === 'POST' && path === '/debug/hear') {
+      if (!debugHear) throw new HttpError(404, 'not found')
+      await hear(String(body.text ?? ''))
+      return {}
+    }
     if (m === 'POST' && path === '/speak') {
       const row = session(body.sessionId)
       const priority = PRIORITIES.has(body.priority) ? body.priority : 'status'

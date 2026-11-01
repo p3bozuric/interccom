@@ -595,3 +595,13 @@ test('config: engine settings merge; an unknown engine name is ignored', async (
   assert.equal(c.sttCommand, 'whisper-cli -f {in}')
   assert.equal(c.localTtsVoice, 'bf_emma')
 })
+
+test('debug hear is a 404 unless enabled, then routes like a transcript', async () => {
+  const off = await start()
+  assert.equal((await off.call('POST', '/debug/hear', { text: 'hey claude hi' })).status, 404)
+  const { call, register, open } = await start({ debugHear: true })
+  const a = await register('api')
+  const s = await open(a.sessionId)
+  assert.equal((await call('POST', '/debug/hear', { text: 'Hey Claude, run it' })).status, 200)
+  assert.deepEqual(await s.line(1), { type: 'heard', text: 'run it' })
+})

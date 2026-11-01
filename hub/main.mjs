@@ -81,7 +81,7 @@ async function shutdown() {
   process.exit(0)
 }
 
-const hub = createHub({ token, engines, audio, onIdleExit: shutdown })
+const hub = createHub({ token, engines, audio, onIdleExit: shutdown, debugHear: process.env.INTERCCOM_DEBUG_HEAR === '1' })
 const listener = createListenerManager({ hub, listMics, stt: engines.stt, sttReady: engines.sttReady, pcmToWav, createVad })
 listener.start() // follows /config and /listen changes from here on
 const { port } = await hub.listen(0)
