@@ -2,7 +2,7 @@ import type { Register, EngineInterface, RenderElement } from 'claude-code'
 import { guidance, coordinatorGuidance, normalizeAutonomy } from './guidance.ts'
 import {
   startLink, hubCall, currentLink, setLinkName, reportBusy, delivery, voiceTag,
-  currentRole, requestRole, deliverReports, isTalking, isMicPaused, isMicOn, currentStatus, linkReady,
+  currentRole, requestRole, deliverReports, isTalking, isMicPaused, isMicOn, currentStatus, linkReady, HubRefusal,
 } from './hub-link.ts'
 import { rememberCheck, takeEligible, askByVoice } from './approvals.ts'
 import { boardText, type BoardData } from './board-view.ts'
@@ -28,7 +28,7 @@ function currentName(): string {
 }
 
 function errorText(err: unknown): string {
-  return String((err as { message?: unknown } | undefined)?.message ?? err).slice(0, 200)
+  return String((err as { message?: unknown } | undefined)?.message ?? err).replace(/^(Error: )?(interccom: )?/, '').slice(0, 200)
 }
 
 async function listenCommand($: EngineInterface, args: string): Promise<{ text: string }> {
@@ -118,7 +118,14 @@ async function interccomCommand($: EngineInterface, args: string): Promise<{ tex
   }
   if (sub.toLowerCase() === 'coordinator') {
     const takeover = (rest[0] ?? '').toLowerCase() === 'take'
-    await requestRole($, 'coordinator', takeover)
+    try {
+      await requestRole($, 'coordinator', takeover)
+    } catch (err) {
+      if (err instanceof HubRefusal && err.status === 409) {
+        return { text: `${err.reason}. /interccom coordinator take makes this session the coordinator instead.` }
+      }
+      throw err
+    }
     return {
       text: 'This session is now the interccom coordinator: it hears everything you say, and the other sessions report to it. '
         + 'Its instructions apply from your next message. /interccom worker steps down.',
@@ -321,10 +328,10 @@ export const register: Register = (on, opts) => {
   }).catch(($, e, next) => next(e))
 
   on('command.run', { command: 'listen' }, async ($, e) => listenCommand($, e.args))
-    .catch(($, e, next) => ({ text: `interccom: ${errorText(next.error)}` }))
+    .catch(($, e, next) => ({ text: errorText(next.error) }))
 
   on('command.run', { command: 'interccom' }, async ($, e) => interccomCommand($, e.args))
-    .catch(($, e, next) => ({ text: `interccom: ${errorText(next.error)}` }))
+    .catch(($, e, next) => ({ text: errorText(next.error) }))
 
   // The session's title is its name: at start (a resumed session keeps its title), with every
   // prompt (a rename in the desktop sidebar), and straight away on /rename.
