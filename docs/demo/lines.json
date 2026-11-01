@@ -1,0 +1,11 @@
+[
+ {"id":"u1","who":"you","text":"Hey Claude, backend: run the tests and fix whatever fails."},
+ {"id":"u2","who":"you","text":"Hey Claude, frontend: make the header sticky on mobile."},
+ {"id":"c1","who":"backend","text":"Two tests were failing in the date parser. I'm fixing them now."},
+ {"id":"c2","who":"frontend","text":"Done. The header sticks on mobile, and the build passes."},
+ {"id":"c3","who":"docs","text":"Quick question. Should the changelog call out the breaking API change?"},
+ {"id":"u3","who":"you","text":"Hey Claude, docs: yes, put it at the top."},
+ {"id":"c4","who":"backend","text":"All forty-two tests pass now."},
+ {"id":"u4","who":"you","text":"Hey Claude, where are we?"},
+ {"id":"c5","who":"coordinator","text":"Backend's tests are green. Frontend shipped the sticky header. Docs put the breaking change at the top of the changelog. Nothing needs you right now."}
+]

@@ -1,0 +1,308 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>interccom demo</title>
+<style>
+  :root {
+    --bg: #0D1117; --card: #161B22; --deep: #11161D; --line: #30363D;
+    --text: #F0F6FC; --soft: #C9D1D9; --muted: #8B949E; --dim: #6E7681;
+    --amber: #F5A524; --cyan: #56D4DD; --green: #3FB950; --blue: #58A6FF; --red: #F85149;
+    --sans: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+    --mono: "Cascadia Mono", "Cascadia Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--bg); }
+  body { font-family: var(--sans); color: var(--text); position: relative; }
+  .abs { position: absolute; }
+  #glow { inset: 0; background: radial-gradient(1200px 700px at 50% 45%, rgba(245,165,36,0.07), transparent 70%); }
+
+  /* intro and outro */
+  .card { inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+  .word { font-size: 168px; font-weight: 700; letter-spacing: -5px; line-height: 1; }
+  .word b { color: var(--amber); font-weight: 700; }
+  .tag1 { font-size: 52px; color: var(--soft); margin-top: 34px; }
+  .tag2 { font-size: 52px; color: var(--amber); margin-top: 6px; }
+  .agents { font-family: var(--mono); font-size: 22px; letter-spacing: 4px; color: var(--muted); margin-bottom: 40px; }
+  #outro { background: var(--bg); }
+  #outro .word { font-size: 120px; }
+  .install { margin-top: 48px; background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 26px 40px; text-align: left; font-family: var(--mono); font-size: 30px; line-height: 1.7; color: var(--soft); }
+  .install span { color: var(--dim); }
+  .url { margin-top: 36px; font-size: 34px; color: var(--cyan); font-family: var(--mono); }
+  .fine { margin-top: 18px; font-size: 24px; color: var(--muted); }
+
+  /* top bar */
+  #top { left: 80px; right: 80px; top: 44px; height: 64px; display: flex; align-items: center; justify-content: space-between; }
+  #brand { font-size: 38px; font-weight: 700; letter-spacing: -1px; width: 420px; }
+  #brand b { color: var(--amber); }
+  #cap { font-size: 30px; color: var(--soft); text-align: center; flex: 1; }
+  #hub { width: 420px; display: flex; justify-content: flex-end; }
+  .chip { display: flex; align-items: center; gap: 14px; height: 56px; padding: 0 24px; border-radius: 28px; background: var(--card); border: 1.5px solid var(--line); font-size: 22px; color: var(--soft); }
+  .chip .dot { width: 12px; height: 12px; border-radius: 50%; }
+  .bars { display: flex; align-items: center; gap: 4px; height: 30px; }
+  .bars i { display: block; width: 5px; border-radius: 3px; }
+
+  /* coordinator card */
+  #coord { left: 80px; right: 80px; top: 140px; border-radius: 20px; background: var(--card); border: 2px solid var(--amber); overflow: hidden; }
+  #coord .head { display: flex; align-items: center; gap: 16px; padding: 20px 28px 8px; }
+  #coord .body { padding: 6px 28px; font-family: var(--mono); font-size: 21px; line-height: 34px; }
+
+  /* panes */
+  .pane { width: 560px; border-radius: 20px; background: var(--card); border: 2px solid var(--line); overflow: hidden; }
+  .head { display: flex; align-items: center; gap: 14px; padding: 20px 24px 14px; border-bottom: 1px solid var(--line); }
+  .head .dot { width: 14px; height: 14px; border-radius: 50%; flex: none; }
+  .head .name { font-size: 28px; font-weight: 600; }
+  .head .agent { font-size: 20px; color: var(--muted); }
+  .head .status { margin-left: auto; font-size: 18px; padding: 5px 14px; border-radius: 14px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+  .body { padding: 14px 24px; font-family: var(--mono); font-size: 19px; line-height: 34px; color: var(--soft); }
+  .ln { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .d { color: var(--dim); } .g { color: var(--green); } .r { color: var(--red); } .a { color: var(--amber); } .b { color: var(--blue); }
+  .you { color: var(--cyan); }
+  .pill { font-family: var(--sans); font-size: 15px; color: var(--cyan); border: 1px solid rgba(86,212,221,0.5); border-radius: 10px; padding: 1px 9px; margin-left: 8px; vertical-align: 2px; }
+
+  /* subtitles */
+  #sub { left: 80px; right: 80px; top: 820px; height: 190px; display: flex; align-items: center; gap: 36px; padding: 0 44px; border-radius: 22px; background: var(--deep); border: 1.5px solid var(--line); }
+  #subbars { display: flex; align-items: center; gap: 6px; height: 110px; width: 180px; flex: none; }
+  #subbars i { display: block; width: 8px; border-radius: 4px; }
+  #subwho { font-family: var(--mono); font-size: 20px; letter-spacing: 3px; margin-bottom: 10px; }
+  #subtext { font-size: 40px; line-height: 1.3; color: var(--text); }
+  #subtext span { transition: none; }
+</style>
+</head>
+<body>
+<div id="glow" class="abs"></div>
+
+<div id="top" class="abs">
+  <div id="brand">inter<b>cc</b>om</div>
+  <div id="cap"></div>
+  <div id="hub"><div class="chip"><span class="dot" id="hubdot"></span><span id="hubtext">Listening</span><span class="bars" id="hubbars"></span></div></div>
+</div>
+
+<div id="coord" class="abs">
+  <div class="head" style="border:0">
+    <span class="dot" id="cdot" style="width:14px;height:14px;border-radius:50%"></span>
+    <span class="name" style="font-size:28px;font-weight:600">coordinator</span>
+    <span class="agent" style="font-size:20px;color:var(--muted)">Claude Code · hears everything, says what matters</span>
+    <span class="status" id="cstatus"></span>
+  </div>
+  <div class="body" id="cbody"></div>
+</div>
+
+<div id="panes"></div>
+
+<div id="sub" class="abs">
+  <div id="subbars"></div>
+  <div><div id="subwho"></div><div id="subtext"></div></div>
+</div>
+
+<div id="intro" class="abs card">
+  <div class="agents">CLAUDE CODE · CODEX · COPILOT CLI · OPENCODE</div>
+  <div class="word">inter<b>cc</b>om</div>
+  <div class="tag1">Talk to your coding agents.</div>
+  <div class="tag2">Let them talk back.</div>
+</div>
+
+<div id="outro" class="abs card">
+  <div class="word">inter<b>cc</b>om</div>
+  <div class="tag1" style="font-size:40px;margin-top:24px">One voice for all your coding agents.</div>
+  <div class="install">
+    <div><span>&gt;</span> /plugin marketplace add p3bozuric/interccom</div>
+    <div><span>&gt;</span> /plugin install interccom@interccom</div>
+  </div>
+  <div class="url">github.com/p3bozuric/interccom</div>
+  <div class="fine">Claude Code · Codex · Copilot CLI · OpenCode  —  cloud or fully local speech</div>
+</div>
+
+<script src="timeline.js"></script>
+<script src="envelope.js"></script>
+<script>
+const $ = id => document.getElementById(id)
+const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v))
+const ease = x => { x = clamp(x); return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2 }
+const ramp = (t, a, b) => ease((t - a) / (b - a))          // 0 → 1 between a and b
+const win = (t, a, b, f = 0.4) => Math.min(ramp(t, a, a + f), 1 - ramp(t, b - f, b)) // in, hold, out
+const COLOR = { working: 'var(--green)', speaking: 'var(--amber)', waiting: 'var(--blue)', question: 'var(--blue)', idle: 'var(--dim)', heard: 'var(--cyan)' }
+
+const { u1, u2, u3, u4, c1, c2, c3, c4, c5 } = T
+const COORD = c4.end + 0.7           // coordinator scene starts
+const OUTRO = c5.end + 0.9
+const you = (text, pill) => `<span class="you">you ›</span> ${text}${pill ? `<span class="pill">${pill}</span>` : ''}`
+
+// Each pane: its log lines (time, html) and its status changes (time, state, label).
+const PANES = [
+  { id: 'backend', agent: 'Claude Code', x: 80,
+    log: [
+      [5.6, '<span class="d">~/shop/backend</span>'],
+      [5.6, '<span class="d">❯</span>'],
+      [u1.end + 0.15, you('run the tests and fix whatever fails')],
+      [u1.end + 0.9, '<span class="g">●</span> Bash(npm test)'],
+      [u1.end + 2.6, '<span class="d">  ⎿</span> 40 passed · <span class="r">2 failed</span>'],
+      [c1.start - 0.4, '<span class="a">●</span> speak("Two tests were failing…")'],
+      [c1.end + 0.5, '<span class="g">●</span> Update(src/date/parse.ts)'],
+      [c2.end - 0.5, '<span class="g">●</span> Update(src/date/format.ts)'],
+      [c3.end - 1.2, '<span class="g">●</span> Bash(npm test)'],
+      [u3.end - 0.2, '<span class="d">  ⎿</span> <span class="g">42 passed</span>'],
+      [c4.start - 0.4, '<span class="a">●</span> speak("All forty-two tests pass…")'],
+    ],
+    status: [[0, 'idle', 'idle'], [u1.end + 0.15, 'heard', 'heard you'], [u1.end + 0.9, 'working', 'working'],
+             [c1.start, 'speaking', 'speaking'], [c1.end, 'working', 'working'], [c4.start, 'speaking', 'speaking'], [c4.end, 'idle', 'done']] },
+  { id: 'frontend', agent: 'Codex', x: 680,
+    log: [
+      [5.6, '<span class="d">› refactor the nav into small components</span>'],
+      [6.6, '<span class="g">•</span> Edited src/nav/Menu.tsx <span class="d">(+42 −18)</span>'],
+      [10.4, '<span class="g">•</span> Edited src/nav/MenuItem.tsx <span class="d">(+27)</span>'],
+      [u2.end + 0.15, you('make the header sticky on mobile')],
+      [u2.end + 0.5, '<span class="d">  ⎿</span> <span class="you">arrived mid-task → its next step</span>'],
+      [u2.end + 1.1, '<span class="g">•</span> Edited src/layout/Header.css <span class="d">(+6 −1)</span>'],
+      [u2.end + 2.6, '<span class="g">•</span> Ran npm run build <span class="g">✓</span>'],
+      [u2.end + 3.6, '<span class="a">•</span> interccom_speak(…)'],
+    ],
+    status: [[0, 'working', 'working'], [u2.end + 0.15, 'heard', 'heard you'], [u2.end + 1.1, 'working', 'working'],
+             [u2.end + 3.6, 'waiting', 'waiting to speak'], [c2.start, 'speaking', 'speaking'], [c2.end, 'idle', 'done']] },
+  { id: 'docs', agent: 'Copilot CLI', x: 1280,
+    log: [
+      [5.6, '<span class="d">❯ update the changelog for v2.0</span>'],
+      [7.4, '<span class="g">●</span> Read CHANGELOG.md'],
+      [9.6, '<span class="g">●</span> Read api/v2/routes.ts'],
+      [12.8, '<span class="g">●</span> Found a breaking change: /orders'],
+      [c2.start + 1.2, '<span class="a">●</span> interccom_speak(question)'],
+      [u3.end + 0.15, you('yes, put it at the top')],
+      [u3.end + 1.0, '<span class="g">●</span> Edit CHANGELOG.md'],
+      [c4.end - 0.2, '<span class="g">✓</span> CHANGELOG.md updated'],
+    ],
+    status: [[0, 'working', 'working'], [c2.start + 1.2, 'waiting', 'waiting to speak'], [c3.start, 'speaking', 'speaking'],
+             [c3.end, 'question', 'has a question'], [u3.end + 0.15, 'heard', 'heard you'], [u3.end + 1.0, 'working', 'working'], [c4.end, 'idle', 'done']] },
+]
+const CLOG = [
+  [COORD + 0.6, '<span class="d">❯</span> /interccom coordinator'],
+  [COORD + 1.5, '<span class="a">●</span> You\'re the coordinator. 3 sessions now report here; they stay quiet.'],
+  [u4.end + 0.15, you('where are we?')],
+  [u4.end + 0.5, '<span class="g">●</span> interccom_board() <span class="d">· backend done · frontend done · docs done</span>'],
+]
+const CSTATUS = [[0, 'idle', 'listening'], [u4.end + 0.15, 'heard', 'heard you'], [c5.start, 'speaking', 'speaking'], [c5.end, 'idle', 'listening']]
+const CAPS = [
+  [5.6, u2.start - 0.2, 'Three agents. One voice channel. Just talk.'],
+  [u2.start - 0.2, c1.start - 0.1, 'Talk mid-task: it reaches the agent at its next step.'],
+  [c1.start - 0.1, u3.start - 0.2, 'One voice at a time. Each session says its name.'],
+  [u3.start - 0.2, COORD - 0.1, 'Answer any session by name.'],
+  [COORD - 0.1, OUTRO, 'Or let one coordinator keep track of the rest.'],
+]
+const LINES = Object.values(T)
+const AGENT = { backend: 'Claude Code', frontend: 'Codex', docs: 'Copilot CLI', coordinator: 'Claude Code' }
+
+// Build static pane DOM once.
+for (const p of PANES) {
+  const el = document.createElement('div')
+  el.className = 'pane abs'; el.id = 'p-' + p.id
+  el.innerHTML = `<div class="head"><span class="dot"></span><span class="name">${p.id}</span><span class="agent">${p.agent}</span><span class="status"></span></div><div class="body"></div>`
+  $('panes').appendChild(el)
+}
+$('hubbars').innerHTML = '<i></i>'.repeat(5)
+$('subbars').innerHTML = '<i></i>'.repeat(16)
+
+const at = (list, t) => { let cur = list[0]; for (const s of list) if (s[0] <= t) cur = s; return cur }
+function renderLog(body, log, t, maxLines) {
+  const shown = log.filter(l => l[0] <= t).slice(-maxLines)
+  body.innerHTML = shown.map(([s, h]) => `<div class="ln" style="opacity:${ramp(t, s, s + 0.25)};transform:translateY(${(1 - ramp(t, s, s + 0.25)) * 8}px)">${h}</div>`).join('')
+}
+function statusEl(el, st, t) {
+  const [, state, label] = st
+  el.querySelector('.status').textContent = label
+  el.querySelector('.status').style.color = COLOR[state]
+  el.querySelector('.status').style.borderColor = COLOR[state]
+  el.querySelector('.head .dot').style.background = COLOR[state]
+  const glow = state === 'speaking' ? 'var(--amber)' : state === 'heard' ? 'var(--cyan)' : 'var(--line)'
+  el.style.borderColor = glow
+  el.style.boxShadow = state === 'speaking' ? '0 0 50px rgba(245,165,36,0.18)' : state === 'heard' ? '0 0 50px rgba(86,212,221,0.16)' : 'none'
+}
+const envAt = t => Math.min(1, 2.4 * (ENV[Math.min(ENV.length - 1, Math.max(0, Math.round(t * FPS)))] || 0))
+
+window.seek = function (t) {
+  // intro / outro
+  $('intro').style.opacity = 1 - ramp(t, 4.6, 5.6)
+  $('intro').style.transform = `scale(${1 + ramp(t, 4.6, 5.6) * 0.04})`
+  const inA = ramp(t, 0.2, 1.4)
+  $('intro').querySelectorAll('div').forEach((d, i) => { const k = ramp(t, 0.2 + i * 0.25, 1.1 + i * 0.25); d.style.opacity = k; d.style.transform = `translateY(${(1 - k) * 18}px)` })
+  $('outro').style.opacity = ramp(t, OUTRO, OUTRO + 0.9)
+  $('outro').querySelectorAll(':scope > div').forEach((d, i) => { const k = ramp(t, OUTRO + 0.3 + i * 0.2, OUTRO + 1.1 + i * 0.2); d.style.opacity = k; d.style.transform = `translateY(${(1 - k) * 18}px)` })
+
+  const main = ramp(t, 5.0, 6.0)
+  for (const id of ['top', 'panes', 'sub']) $(id).style.opacity = main
+
+  // coordinator transition
+  const k = ramp(t, COORD, COORD + 1.2)
+  const coordH = 236
+  $('coord').style.height = (coordH * k) + 'px'
+  $('coord').style.opacity = k
+  const paneTop = 140 + k * (coordH + 24), paneH = 640 - k * (coordH + 24)
+  for (const p of PANES) {
+    const el = $('p-' + p.id)
+    const enter = ramp(t, 5.2 + PANES.indexOf(p) * 0.15, 6.2 + PANES.indexOf(p) * 0.15)
+    el.style.left = p.x + 'px'; el.style.top = (paneTop + (1 - enter) * 30) + 'px'; el.style.height = paneH + 'px'
+    el.style.opacity = enter * (1 - k * 0.35)
+    renderLog(el.querySelector('.body'), p.log, t, Math.floor((paneH - 100) / 34))
+    let st = at(p.status, t)
+    if (k > 0.5 && st[1] === 'idle') st = [0, 'idle', 'quiet · reports in']
+    statusEl(el, st, t)
+  }
+  renderLog($('cbody'), CLOG, t, 4)
+  const cst = at(CSTATUS, t)
+  $('cstatus').textContent = cst[2]; $('cstatus').style.color = COLOR[cst[1]]; $('cstatus').style.borderColor = COLOR[cst[1]]
+  $('cdot').style.background = COLOR[cst[1]]
+  $('coord').style.boxShadow = cst[1] === 'speaking' ? '0 0 60px rgba(245,165,36,0.18)' : cst[1] === 'heard' ? '0 0 60px rgba(86,212,221,0.16)' : 'none'
+  $('coord').style.borderColor = cst[1] === 'heard' ? 'var(--cyan)' : 'var(--amber)'
+
+  // caption
+  const cap = CAPS.find(c => t >= c[0] && t < c[1])
+  $('cap').textContent = cap ? cap[2] : ''
+  $('cap').style.opacity = cap ? win(t, cap[0], cap[1], 0.35) : 0
+
+  // who is talking
+  const cur = LINES.find(l => t >= l.start - 0.05 && t < l.end + 0.7)
+  const sent = LINES.find(l => l.who === 'you' && t >= l.end && t < l.end + 1.0)
+  const e = envAt(t)
+  let hubText = 'Listening', hubColor = 'var(--cyan)'
+  if (cur && t < cur.end) {
+    if (cur.who === 'you') hubText = 'Hearing you'
+    else { hubText = cur.who === 'coordinator' ? 'Talking' : `Talking · ${cur.who}`; hubColor = 'var(--amber)' }
+  } else if (sent) {
+    hubText = sent === u4 ? 'Sent → coordinator' : `Sent → ${sent.text.split(':')[0].replace('Hey Claude, ', '')}`
+  }
+  $('hubtext').textContent = hubText
+  $('hubdot').style.background = hubColor
+  document.querySelector('#hub .chip').style.borderColor = hubText === 'Listening' ? 'var(--line)' : hubColor
+  $('hubbars').querySelectorAll('i').forEach((b, i) => {
+    const h = 6 + 24 * e * (0.55 + 0.45 * Math.abs(Math.sin(t * 9 + i * 1.7)))
+    b.style.height = h + 'px'; b.style.background = hubColor; b.style.opacity = 0.5 + e
+  })
+
+  // subtitles
+  const sub = $('sub')
+  if (cur) {
+    const isYou = cur.who === 'you'
+    const color = isYou ? 'var(--cyan)' : 'var(--amber)'
+    $('subwho').textContent = isYou ? 'YOU' : cur.who === 'coordinator' ? 'COORDINATOR' : `${cur.who.toUpperCase()} · ${AGENT[cur.who].toUpperCase()}`
+    $('subwho').style.color = color
+    const words = (isYou || cur.who === 'coordinator' ? cur.text : `${cur.who}: ${cur.text}`).split(' ')
+    const total = words.join(' ').length
+    let acc = 0
+    const p = clamp((t - cur.start) / (cur.dur * 0.95))
+    $('subtext').innerHTML = words.map(w => { const s = acc / total; acc += w.length + 1; return `<span style="opacity:${s <= p ? 1 : 0.28}">${w}</span>` }).join(' ')
+    $('subtext').style.opacity = $('subwho').style.opacity = 1 - ramp(t, cur.end + 0.3, cur.end + 0.7)
+    $('subbars').querySelectorAll('i').forEach((b, i) => {
+      const h = 10 + 100 * e * (0.35 + 0.65 * Math.abs(Math.sin(t * 7 + i * 0.9) * Math.cos(t * 3.1 + i * 0.4)))
+      b.style.height = h + 'px'; b.style.background = color
+    })
+    sub.style.borderColor = t < cur.end ? (isYou ? 'rgba(86,212,221,0.5)' : 'rgba(245,165,36,0.5)') : 'var(--line)'
+  } else {
+    $('subwho').textContent = ''; $('subtext').innerHTML = '<span style="color:var(--dim)">Listening for “Hey Claude”…</span>'
+    $('subtext').style.opacity = 1
+    $('subbars').querySelectorAll('i').forEach(b => { b.style.height = '10px'; b.style.background = 'var(--line)' })
+    sub.style.borderColor = 'var(--line)'
+  }
+}
+const q = new URLSearchParams(location.search).get('t')
+seek(q ? Number(q) : 0)
+</script>
+</body>
+</html>
