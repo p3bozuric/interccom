@@ -2,12 +2,13 @@
 // voice routing, and NDJSON event streams back to sessions.
 import http from 'node:http'
 import { createHmac, timingSafeEqual } from 'node:crypto'
-import { Board, ROLES } from './board.mjs'
+import { Board, ROLES, publicRow } from './board.mjs'
 import { TalkQueue } from './queue.mjs'
 import { route } from './router.mjs'
 import { toSpeakable } from './text.mjs'
 import { createPlayer } from './player.mjs'
 import { ENGINES } from './engines/index.mjs'
+import { hostGuidance, voiceNote } from './hosts/text.mjs'
 
 export { createPlayer }
 
@@ -21,6 +22,24 @@ const CONFIG_FIELDS = [
 const ERROR_WINDOW_MS = 60_000
 const MAX_BODY = 1 << 20
 const NONCE = /^[0-9a-f]{1,128}$/i
+const MAX_INBOX = 20
+const RECENT_MS = 15 * 60_000 // how long the coordinator may relay something the person said
+const MAX_RECENT = 50
+const HOST_EVENTS = new Set(['session-start', 'prompt', 'tool', 'stop'])
+
+// Words only, lower case: "Use port 8080!" and "use port 8080" are the same quote.
+export function normWords(s) {
+  return String(s ?? '').toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim()
+}
+
+// Folder equality across separators, trailing slashes and (on Windows) case.
+export function samePath(a, b, platform = process.platform) {
+  const n = p => {
+    const s = String(p ?? '').replace(/\\/g, '/').replace(/\/+$/, '')
+    return platform === 'win32' ? s.toLowerCase() : s
+  }
+  return Boolean(a) && n(a) === n(b)
+}
 
 class HttpError extends Error {
   constructor(status, message) { super(message); this.status = status }
@@ -47,7 +66,9 @@ function readJson(req) {
   })
 }
 
-export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 30_000, onIdleExit = () => {}, startPaused = false, streamGraceMs = 15_000, pingMs = 30_000, debugHear = false }) {
+export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 30_000, onIdleExit = () => {}, startPaused = false, streamGraceMs = 15_000, pingMs = 30_000, debugHear = false,
+  hostSubmit = async ({ host }) => { throw new Error(`interccom can't start a turn in ${host} sessions`) },
+}) {
   const board = new Board()
   const queue = new TalkQueue()
   const streams = new Map() // sessionId -> open events response
@@ -73,6 +94,7 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
     sttCommand: '',
   }
   let listenSticky = false
+  const recentHeard = [] // { at, norm }: what the person said to the coordinator, for relay checks
   const configListeners = []
   let armedUntil = 0
   let micState = 'off' // 'listening' | 'off', replayed to every new stream
@@ -157,21 +179,98 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
     if (coord) {
       // The coordinator hears everything; a name after the wake word is a hint, and it does the routing.
       board.markActive(coord.sessionId, now())
+      recentHeard.push({ at: now(), norm: normWords(r.text) })
+      if (recentHeard.length > MAX_RECENT) recentHeard.shift()
       send(streams.get(coord.sessionId), { type: 'heard', text: r.text, ...(r.name !== undefined ? { addressed: r.name } : {}) })
       return
     }
     const target = (r.name !== undefined && board.byName(r.name)) || board.defaultTarget()
-    const res = target && streams.get(target.sessionId)
-    if (!res) return
     // Whoever you just spoke to is the one you're working with now.
-    board.markActive(target.sessionId, now())
-    send(res, { type: 'heard', text: r.text })
+    if (target && deliverHeard(target, r.text)) board.markActive(target.sessionId, now())
+  }
+
+  // Heard speech to one session, however its host takes it. False when it couldn't be delivered.
+  function deliverHeard(row, text) {
+    if (row.delivery === 'push') {
+      const res = streams.get(row.sessionId)
+      if (!res) return false
+      send(res, { type: 'heard', text })
+      return true
+    }
+    if (row.delivery === 'none') {
+      reportError(`${row.name} can't hear voice input: its agent has no way to receive it yet.`)
+      return false
+    }
+    row.inbox.push(text)
+    if (row.inbox.length > MAX_INBOX) row.inbox.shift()
+    if (!row.busy && row.hostSessionId) submitIdle(row)
+    return true
+  }
+
+  // An idle pull session gets its inbox as a new turn; a failed start keeps it for the next hook.
+  function submitIdle(row) {
+    const texts = row.inbox.splice(0)
+    if (!texts.length) return
+    board.setBusy(row.sessionId, true, now())
+    Promise.resolve()
+      .then(() => hostSubmit({ host: row.host, hostSessionId: row.hostSessionId, cwd: row.cwd, text: texts.join(' ') }))
+      .catch(err => {
+        if (board.get(row.sessionId) === row) { row.inbox.unshift(...texts); board.setBusy(row.sessionId, false, now()) }
+        reportError(err)
+      })
+  }
+
+  // A host hook (Codex) reports an event for its own session id and gets back what to inject.
+  function hostEvent(body, t) {
+    const host = String(body.host ?? '')
+    const hostSessionId = String(body.hostSessionId ?? '')
+    if (!host || !hostSessionId || !HOST_EVENTS.has(body.event)) throw new HttpError(400, 'host, hostSessionId and a known event are required')
+    const wasBound = board.byHostSession(host, hostSessionId)
+    const row = board.bindHostSession(host, hostSessionId, String(body.cwd ?? ''), (a, b) => samePath(a, b))
+    if (!row || row.delivery !== 'pull') return {}
+    if (!wasBound) {
+      const res = streams.get(row.sessionId)
+      if (res) send(res, { type: 'bound', hostSessionId })
+    }
+    const take = () => (row.inbox.length ? voiceNote(row.tag, row.inbox.splice(0)) : undefined)
+    if (body.event === 'session-start') {
+      board.setBusy(row.sessionId, false, t)
+      return { context: [hostGuidance(row.name, row.tag), take()].filter(Boolean).join('\n\n') }
+    }
+    if (body.event === 'stop') {
+      const note = take()
+      // Speech that arrived as the turn ended keeps it going instead of waiting for the next one.
+      if (note) return { block: note }
+      board.setBusy(row.sessionId, false, t)
+      return {}
+    }
+    board.setBusy(row.sessionId, true, t)
+    if (body.event === 'prompt') board.markActive(row.sessionId, t)
+    const note = take()
+    return note ? { context: note } : {}
+  }
+
+  // The coordinator passes the person's own recent words to a session SendMessage can't reach.
+  function relay(body, t) {
+    const coord = session(body.sessionId)
+    if (coord.role !== 'coordinator') throw new HttpError(403, 'only the coordinator can relay')
+    const target = board.byName(String(body.to ?? ''))
+    if (!target) throw new HttpError(404, 'no session by that name')
+    if (target.delivery === 'none') throw new HttpError(409, `${target.name} can't receive voice input`)
+    const quote = String(body.quote ?? '').trim()
+    const q = normWords(quote)
+    if (!q) throw new HttpError(400, 'quote is empty')
+    const said = recentHeard.some(h => t - h.at < RECENT_MS && ` ${h.norm} `.includes(` ${q} `))
+    if (!said) throw new HttpError(403, "relay only passes on the person's own words from the last 15 minutes; quote them exactly")
+    if (!deliverHeard(target, quote)) throw new HttpError(409, `${target.name} is not connected`)
+    return { relayed: target.name }
   }
 
   // One coordinator per machine: a second one is refused unless it takes over.
   function setRole(id, role, takeover, t) {
     if (!ROLES.has(role)) throw new HttpError(400, 'role must be worker or coordinator')
     const row = session(id)
+    if (role === 'coordinator' && row.delivery !== 'push') throw new HttpError(400, 'only Claude Code sessions can be the coordinator for now')
     if (role === 'coordinator') {
       const current = board.coordinator()
       if (current && current !== row) {
@@ -245,7 +344,7 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
     if (m === 'GET' && path === '/health') return { ok: true, sessions: board.size }
     if (m === 'GET' && path === '/board') {
       return {
-        sessions: board.list().map(r => ({ ...r })),
+        sessions: board.list().map(publicRow),
         mode: config.listenMode,
         playing: player.isPlaying(),
         coordinator: liveCoordinator()?.name ?? null,
@@ -254,7 +353,10 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
     }
     if (m === 'POST' && path === '/sessions') {
       cancelIdle()
-      const reg = board.register({ name: body.name, cwd: body.cwd, pid: body.pid }, t)
+      const reg = board.register({
+        name: body.name, cwd: body.cwd, pid: body.pid,
+        host: body.host, delivery: body.delivery, hostSessionId: body.hostSessionId, tag: body.tag,
+      }, t)
       const timer = setTimeout(() => removeSession(reg.sessionId), streamGraceMs)
       timer.unref?.()
       graceTimers.set(reg.sessionId, timer)
@@ -269,6 +371,8 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
       return { mode: config.listenMode }
     }
     if (m === 'POST' && path === '/stop') return { flushed: stop() }
+    if (m === 'POST' && path === '/host/event') return hostEvent(body, t)
+    if (m === 'POST' && path === '/board/relay') return relay(body, t)
     // Testing aid, off unless the hub runs with INTERCCOM_DEBUG_HEAR=1: a typed line goes
     // through the same routing as a transcript, so routing can be tested without a mic.
     if (m === 'POST' && path === '/debug/hear') {

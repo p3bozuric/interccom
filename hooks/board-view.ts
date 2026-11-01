@@ -1,7 +1,7 @@
 // Text views of the hub's status board. No imports: tests load this file straight into Node.
 
 export type BoardRow = {
-  name?: unknown; cwd?: unknown; role?: unknown; busy?: unknown
+  name?: unknown; cwd?: unknown; role?: unknown; busy?: unknown; host?: unknown; delivery?: unknown
   lastLine?: unknown; openQuestion?: unknown; changedAt?: unknown
 }
 export type BoardData = {
@@ -32,7 +32,7 @@ export function boardText(board: BoardData, now: number): string {
   if (!rows.length) return 'No sessions are connected.'
   const lines = rows.map((r) => {
     const parts = [
-      `${String(r.name)}${r.role === 'coordinator' ? ' (coordinator)' : ''}`,
+      `${String(r.name)}${r.role === 'coordinator' ? ' (coordinator)' : ''}${r.host && r.host !== 'claude-code' ? ` [${String(r.host)}${r.delivery === 'none' ? ', cannot hear' : ''}]` : ''}`,
       r.busy ? 'busy' : 'idle',
       `folder ${JSON.stringify(String(r.cwd ?? ''))}`,
     ]

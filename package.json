@@ -1,8 +1,40 @@
 {
   "name": "interccom",
-  "private": true,
+  "version": "0.2.0",
+  "description": "One voice for all your coding agents (Claude Code, Codex, ...): hear conclusions and questions, talk back hands-free.",
+  "license": "MIT",
   "type": "module",
-  "engines": { "node": ">=18.3" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/p3bozuric/interccom.git"
+  },
+  "homepage": "https://github.com/p3bozuric/interccom#readme",
+  "keywords": [
+    "claude-code",
+    "codex",
+    "voice",
+    "mcp",
+    "speech",
+    "tts",
+    "stt",
+    "agent"
+  ],
+  "engines": {
+    "node": ">=18.3"
+  },
+  "bin": {
+    "interccom": "hub/cli.mjs"
+  },
+  "files": [
+    "hub/",
+    "hooks/",
+    ".claude-plugin/plugin.json",
+    ".claude-plugin/marketplace.json",
+    ".codex-plugin/",
+    "hosts/",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "test": "node --experimental-strip-types --test \"tests/**/*.test.mjs\" \"tests/**/*.test.ts\""
   }

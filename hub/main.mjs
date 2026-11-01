@@ -14,6 +14,7 @@ import { playArgv, playOutcome, listMics } from './audio/index.mjs'
 import { createListenerManager } from './listener.mjs'
 import { createVad } from './vad.mjs'
 import { pcmToWav } from './wav.mjs'
+import { resolveCodexArgv, queueArgv } from './hosts/codex.mjs'
 
 const { values } = parseArgs({ options: { 'state-dir': { type: 'string' } } })
 const stateDir = values['state-dir'] || path.join(os.homedir(), '.interccom')
@@ -68,6 +69,28 @@ const audio = {
   },
 }
 
+// Speech for an idle Codex session becomes its next message through `codex queue`. No shell:
+// the transcript is one argv entry, never parsed as a command line.
+const NO_CODEX = "Couldn't find Codex to pass your speech to. Set INTERCCOM_CODEX_BIN to its full path."
+function hostSubmit({ host, hostSessionId, cwd, text }) {
+  if (host !== 'codex') return Promise.reject(new Error(`interccom can't start a turn in ${host} sessions`))
+  const base = resolveCodexArgv()
+  if (!base) return Promise.reject(new Error(NO_CODEX))
+  const [cmd, ...args] = queueArgv(base, { hostSessionId, text, cwd })
+  return new Promise((resolve, reject) => {
+    const child = spawn(cmd, args, { stdio: ['ignore', 'ignore', 'pipe'], windowsHide: true, cwd: stateDir })
+    let stderr = ''
+    const timer = setTimeout(() => child.kill(), 30_000)
+    child.stderr?.on('data', d => { stderr = (stderr + d).slice(-500) })
+    child.on('error', err => { clearTimeout(timer); reject(err?.code === 'ENOENT' ? new Error(NO_CODEX) : err) })
+    child.on('close', code => {
+      clearTimeout(timer)
+      if (code === 0) resolve()
+      else reject(new Error(`Couldn't pass your speech to Codex (codex queue exit ${code}): ${stderr.trim().slice(-200)}`))
+    })
+  })
+}
+
 function removeHubFile() {
   try {
     if (JSON.parse(readFileSync(hubFile, 'utf8')).pid === process.pid) unlinkSync(hubFile)
@@ -81,7 +104,7 @@ async function shutdown() {
   process.exit(0)
 }
 
-const hub = createHub({ token, engines, audio, onIdleExit: shutdown, debugHear: process.env.INTERCCOM_DEBUG_HEAR === '1' })
+const hub = createHub({ token, engines, audio, onIdleExit: shutdown, hostSubmit, debugHear: process.env.INTERCCOM_DEBUG_HEAR === '1' })
 const listener = createListenerManager({ hub, listMics, stt: engines.stt, sttReady: engines.sttReady, pcmToWav, createVad })
 listener.start() // follows /config and /listen changes from here on
 const { port } = await hub.listen(0)

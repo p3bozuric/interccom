@@ -1,8 +1,8 @@
 # interccom
 
-**Talk to Claude Code. Let it talk back.**
+**Talk to your coding agents. Let them talk back.**
 
-interccom is a Claude Code plugin that gives your sessions a voice and ears. Claude says out loud only what you need to hear: conclusions, questions, heads-ups. It never reads out reasoning, code or file paths. You answer by just talking. No push-to-talk, no Enter key, and you can do it while Claude is mid-task.
+interccom gives Claude Code and Codex sessions a voice and ears. Claude says out loud only what you need to hear: conclusions, questions, heads-ups. It never reads out reasoning, code or file paths. You answer by just talking. No push-to-talk, no Enter key, and you can do it while Claude is mid-task.
 
 Run several sessions at once and they share one voice channel. They take turns, each says its name, and you can address one by name: *"Hey Claude, frontend: run the tests."* Or make one session the **coordinator**: you talk only to it, and it keeps track of the others for you.
 
@@ -26,6 +26,29 @@ Speech can run in the cloud (ElevenLabs) or entirely on your machine (any OpenAI
   - If Claude is idle, it arrives as your next message.
   - If Claude is mid-task, it's attached to Claude's next step, so Claude can change course right away.
 
+## Codex
+
+interccom also works with [Codex CLI](https://github.com/openai/codex) (0.166 or newer). Codex sessions join the same voice channel as Claude Code sessions: one voice at a time, addressable by name, on the same board. With a coordinator running, they report to it.
+
+Install it as a Codex plugin from this repository:
+
+```
+codex plugin marketplace add p3bozuric/interccom
+codex plugin add interccom
+```
+
+Or set it up by hand with `npx -y interccom codex-setup` (once the npm package is published), or with `node path/to/interccom/hub/cli.mjs codex-setup` from a clone. Either prints a `~/.codex/config.toml` entry and a `~/.codex/hooks.json` to add. Codex may ask you to trust the hooks the first time.
+
+- **Settings:** Codex has no plugin settings screen, so set the same options as `INTERCCOM_*` environment variables, either in your environment or in the MCP entry's `env`. For example: `INTERCCOM_TTS_ENGINE=local`, `INTERCCOM_STT_ENGINE=local`, `ELEVENLABS_API_KEY=…`. The hub uses the settings of whichever session connected most recently.
+- **How it hears:**
+  - Speech heard mid-turn is attached at Codex's next tool step.
+  - Speech heard as a turn ends keeps the turn going.
+  - Speech heard while Codex is idle is sent with `codex queue`. If Codex isn't on PATH as `codex`, set `INTERCCOM_CODEX_BIN`.
+- **Codex's own voice input:** keep it off while interccom listens. Only one program can own the mic.
+- **Coordinator:** Codex sessions can't be the coordinator yet, and Claude Code's SendMessage can't reach them. The coordinator can still pass your exact words to a Codex session (`relay`), but never instructions of its own.
+
+Other agents that support MCP can use `interccom mcp` to speak and show up on the board, but they can't hear yet.
+
 ## Requirements
 
 - Claude Code (with plugin support)
@@ -41,7 +64,7 @@ Speech can run in the cloud (ElevenLabs) or entirely on your machine (any OpenAI
 
 ## Install
 
-In Claude Code:
+In Claude Code (for Codex, see above):
 
 ```
 /plugin marketplace add p3bozuric/interccom
@@ -138,7 +161,7 @@ After changing engines, close all sessions so the hub restarts with the new sett
 
 ## Roadmap
 
-- **Other coding agents:** Codex, GitHub Copilot CLI and other MCP-capable agents on the same voice channel ([design](docs/superpowers/specs/2026-11-01-interccom-hosts.md)).
+- **More coding agents:** GitHub Copilot CLI and Gemini CLI hearing too, and Codex as a coordinator ([design](docs/superpowers/specs/2026-11-01-interccom-hosts.md)).
 - **Voice approvals:** approve or deny permission prompts by voice, with read-back and confirmation for anything destructive.
 - **Setup:** a `/interccom setup` guide and a mic picker.
 - **Claude Code desktop app and phone:** the PC goes quiet when you're on your phone.
@@ -151,6 +174,8 @@ claude plugin validate .
 ```
 
 Testing on a real Windows PC: [docs/testing-locally.md](docs/testing-locally.md).
+
+The npm package `interccom` (bin `interccom`: `mcp`, `codex-hook`, `codex-setup`) is the hub plus the adapters for agents other than Claude Code. `npm pack --dry-run` shows what it ships.
 
 Design and plans live in `docs/superpowers/`.
 

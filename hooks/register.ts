@@ -78,7 +78,9 @@ async function interccomCommand($: EngineInterface, args: string): Promise<{ tex
   return usage
 }
 
-async function boardTool($: EngineInterface, input: { resolve?: unknown; decision?: unknown }): Promise<{ result: string }> {
+type BoardInput = { resolve?: unknown; decision?: unknown; relay?: { to?: unknown; quote?: unknown } }
+
+async function boardTool($: EngineInterface, input: BoardInput): Promise<{ result: string }> {
   const id = currentLink()?.sessionId
   if (!id) return { result: 'interccom is not connected to the hub yet.' }
   const notes: string[] = []
@@ -91,6 +93,11 @@ async function boardTool($: EngineInterface, input: { resolve?: unknown; decisio
   if (decision) {
     await hubCall($, 'POST', '/board/decision', { sessionId: id, text: decision })
     notes.push('Decision logged.')
+  }
+  const to = String(input.relay?.to ?? '').trim()
+  if (to) {
+    const out = (await hubCall($, 'POST', '/board/relay', { sessionId: id, to, quote: String(input.relay?.quote ?? '') })) as { relayed?: unknown }
+    notes.push(`Passed the person's words to ${String(out.relayed)}.`)
   }
   const board = (await hubCall($, 'GET', '/board')) as BoardData
   return { result: [...notes, boardText(board, Date.now())].join('\n') }
@@ -129,6 +136,12 @@ export const register: Register = (on, opts) => {
         properties: {
           resolve: { type: 'string', description: 'Coordinator only: the session name whose open question is now handled.' },
           decision: { type: 'string', description: 'Coordinator only: one plain sentence describing a decision you made without the person.' },
+          relay: {
+            type: 'object',
+            description: "Coordinator only: pass the person's own recent words, quoted exactly, to a session SendMessage can't reach (Codex and other non-Claude agents).",
+            properties: { to: { type: 'string', description: 'Session name.' }, quote: { type: 'string', description: 'The exact words the person said.' } },
+            required: ['to', 'quote'],
+          },
         },
       },
       isDeferred: false,
@@ -200,7 +213,7 @@ export const register: Register = (on, opts) => {
     return { result: out.queued ? 'Speaking.' : 'Nothing to say.' }
   }).catch(($, e, next) => ({ result: `interccom could not speak: ${errorText(next.error)}` }))
 
-  on('tool.call', { tool: 'mcp__interccom__board' }, async ($, e) => boardTool($, e as { resolve?: unknown; decision?: unknown }))
+  on('tool.call', { tool: 'mcp__interccom__board' }, async ($, e) => boardTool($, e as BoardInput))
     .catch(($, e, next) => ({ result: `interccom board unavailable: ${errorText(next.error)}` }))
 
   // The person typed here: this is the session they're working with.

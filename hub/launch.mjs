@@ -15,7 +15,7 @@ function alive(pid) {
 // Returns { port, token } when the hub named by hub.json is alive and proves
 // it holds the token (HMAC of a fresh nonce, asked without the token), else null. A rejected hub.json is
 // removed, but only if it still names the same pid.
-async function probe(stateDir) {
+export async function probe(stateDir) {
   const file = path.join(stateDir, 'hub.json')
   let h
   try { h = JSON.parse(readFileSync(file, 'utf8')) } catch { return null }

@@ -81,18 +81,26 @@ Done: `hub/audio/{windows,macos,linux}.mjs`, selected by `hub/audio/index.mjs`. 
 
 1. ✅ **Local speech engines**: `local` (OpenAI-compatible servers) and `command` (Piper, whisper-cli). Done on this branch.
 2. ✅ **Audio on macOS and Linux.** Done on this branch; still to be tested on real machines.
-3. **`interccom mcp`**: the stdio MCP server with `speak` and `board`, acting as the session link. Any MCP host can speak, and it shows up on the board and in the coordinator's reports.
-4. **Codex adapter** (section 2a): Codex plugin, hooks for guidance, mid-turn, turn-end and busy/idle, idle delivery through `codex queue`, and a Codex section in the testing guide.
-5. **`/sessions/:id/say`** for coordinator relays to non-Claude workers.
+3. ✅ **`interccom mcp`** (`hub/mcp.mjs`): the stdio MCP server with `speak` and `board`, acting as the session link. Any MCP host can speak, and it shows up on the board and in the coordinator's reports. Hosts other than Codex are speak-only (`delivery: none`).
+4. ✅ **Codex adapter**:
+   - `.codex-plugin/plugin.json`, with `hosts/codex/{mcp,hooks}.json`
+   - `interccom codex-hook` (`hub/codex-hook.mjs`)
+   - the hub's pull inbox and `POST /host/event`
+   - idle delivery through `codex queue` with no shell
+   - `interccom codex-setup` for a manual install
+   - testing guide §7d
+5. ✅ **Coordinator relay** to non-Claude workers: `POST /board/relay`, exposed as `board` `relay` { to, quote }. The hub only passes on a quote of what the person said to the coordinator in the last 15 minutes, matched on whole words. This replaces the `/sessions/:id/say` sketch in section 3.
+- **npm:** the package is named `interccom` (owner), with bin `interccom`. It isn't published yet: run `npm publish` when ready.
 6. **Copilot CLI, Gemini CLI**: the same pattern where their hooks allow it; the wrapper only for a host without hooks.
 7. Later: local wake-word and VAD models (the transcribe-then-match approach sends room audio to the STT engine; with a local STT engine that's already on-device).
 
 ## Decisions
 
 - First host after Claude Code: **Codex** (owner).
+- npm package name: **`interccom`** (owner).
 - Native dependency: **none**. Codex integrates through hooks + MCP + `codex queue`; the wrapper is deferred, and would be a separate optional package (builder's recommendation, accepted).
 
 ## Open questions for the owner
 
 - Does "GitHub CLI" mean Copilot CLI (assumed above)?
-- Should the npm package be `interccom`, if the name is free?
+

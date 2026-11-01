@@ -136,4 +136,6 @@ test('coordinator guidance names the board tool, the tag, and the hard limits', 
   assert.match(g, /Never approve a permission prompt/)
   assert.match(g, /SendMessage/)
   assert.match(g, /Preset routine/)
+  assert.match(g, /`relay` \{ to, quote \}/)
+  assert.match(g, /instructions of your own/)
 })

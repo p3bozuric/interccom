@@ -605,3 +605,102 @@ test('debug hear is a 404 unless enabled, then routes like a transcript', async 
   assert.equal((await call('POST', '/debug/hear', { text: 'Hey Claude, run it' })).status, 200)
   assert.deepEqual(await s.line(1), { type: 'heard', text: 'run it' })
 })
+
+// --- Other hosts: pull delivery (Codex), MCP-only sessions, coordinator relay ---
+
+async function withCodex(opts = {}) {
+  const submitted = []
+  const h = await start({ hostSubmit: async s => { submitted.push(s); if (opts.failSubmit) throw new Error('codex not found') }, ...opts })
+  const reg = (await h.call('POST', '/sessions', { name: 'cx', cwd: 'C:\\w\\cx', pid: 1, host: 'codex', delivery: 'pull', tag: 'T1' })).json
+  const s = await h.open(reg.sessionId)
+  const ev = (event, extra = {}) => h.call('POST', '/host/event', { host: 'codex', hostSessionId: 'thread-1', cwd: 'C:/w/cx/', event, ...extra })
+  return { ...h, reg, s, ev, submitted }
+}
+
+test('codex: the first hook binds by folder, gets guidance with the tag, and the link is told', async () => {
+  const { ev, s, call } = await withCodex()
+  const r = await ev('session-start')
+  assert.match(r.json.context, /^# Voice \(interccom\)/)
+  assert.ok(r.json.context.includes('Your session is called cx'))
+  assert.ok(r.json.context.includes('[interccom:T1]'))
+  assert.deepEqual(await s.line(1), { type: 'bound', hostSessionId: 'thread-1' })
+  const row = (await call('GET', '/board')).json.sessions[0]
+  assert.equal(row.host, 'codex')
+  assert.equal(row.hostSessionId, 'thread-1')
+  assert.equal(row.tag, undefined) // never on the board
+  assert.equal(row.inbox, undefined)
+  // Unknown thread in another folder: nothing to do.
+  assert.deepEqual((await call('POST', '/host/event', { host: 'codex', hostSessionId: 'x', cwd: '/elsewhere', event: 'tool' })).json, {})
+  assert.equal((await call('POST', '/host/event', { host: 'codex', hostSessionId: 'x', event: 'nope' })).status, 400)
+})
+
+test('codex: speech mid-turn rides on the next tool hook; at turn end it blocks the stop', async () => {
+  const { hub, ev, submitted } = await withCodex()
+  await ev('session-start')
+  await ev('prompt')
+  await hub.hear('Hey Claude, also run lint')
+  assert.deepEqual((await ev('tool')).json, { context: 'Voice note [interccom:T1] — the person said (by voice, while you were working): ["also run lint"]' })
+  assert.deepEqual((await ev('tool')).json, {})
+  await hub.hear('Hey Claude, and commit')
+  assert.deepEqual((await ev('stop')).json, { block: 'Voice note [interccom:T1] — the person said (by voice, while you were working): ["and commit"]' })
+  assert.deepEqual((await ev('stop', { stopHookActive: true })).json, {})
+  assert.deepEqual(submitted, [])
+})
+
+test('codex: speech while idle starts a turn through hostSubmit; a failure keeps it for the next hook', async () => {
+  const { hub, ev, submitted, call } = await withCodex()
+  await ev('session-start')
+  await hub.hear('Hey Claude, what changed?')
+  await waitFor(() => submitted.length === 1)
+  assert.deepEqual(submitted[0], { host: 'codex', hostSessionId: 'thread-1', cwd: 'C:\\w\\cx', text: 'what changed?' })
+  assert.equal((await call('GET', '/board')).json.sessions[0].busy, true)
+
+  const f = await withCodex({ failSubmit: true })
+  await f.ev('session-start')
+  await f.hub.hear('Hey Claude, hello')
+  await waitFor(() => f.s.lines.some(l => l.type === 'error'))
+  assert.equal(f.s.lines.find(l => l.type === 'error').message, 'codex not found')
+  assert.match((await f.ev('prompt')).json.context, /\["hello"\]$/)
+})
+
+test('codex: speech before any hook bound the session waits in the inbox for SessionStart', async () => {
+  const { hub, ev, submitted } = await withCodex()
+  await hub.hear('Hey Claude, start with the tests')
+  const r = (await ev('session-start')).json
+  assert.match(r.context, /\["start with the tests"\]$/)
+  assert.deepEqual(submitted, [])
+})
+
+test('an MCP-only session can speak but is never a default target; addressing it explains why', async () => {
+  const { hub, call, register, open } = await start()
+  const claude = await register('api')
+  const cs = await open(claude.sessionId)
+  const mcp = (await call('POST', '/sessions', { name: 'gem', cwd: '/g', host: 'gemini', delivery: 'none' })).json
+  const ms = await open(mcp.sessionId)
+  await call('POST', `/sessions/${mcp.sessionId}/active`, {})
+  await hub.hear('Hey Claude, hello')
+  assert.deepEqual(await cs.line(1), { type: 'heard', text: 'hello' })
+  await hub.hear('Hey Claude, gem: hi')
+  assert.match((await ms.line(1)).message, /gem can't hear voice input/)
+  assert.equal((await call('POST', `/sessions/${mcp.sessionId}/role`, { role: 'coordinator' })).status, 400)
+})
+
+test('relay: the coordinator passes the person\'s own recent words to a Codex worker, nothing else', async () => {
+  const submitted = []
+  const { hub, call, register, open } = await start({ hostSubmit: async s => { submitted.push(s) } })
+  const coord = await register('boss')
+  await open(coord.sessionId)
+  await call('POST', `/sessions/${coord.sessionId}/role`, { role: 'coordinator' })
+  const cx = (await call('POST', '/sessions', { name: 'cx', cwd: '/w/cx', host: 'codex', delivery: 'pull', tag: 'T', hostSessionId: 'th' })).json
+  await open(cx.sessionId)
+  await hub.hear('Hey Claude, cx: use port 8080, please!')
+  const ok = await call('POST', '/board/relay', { sessionId: coord.sessionId, to: 'cx', quote: 'Use port 8080' })
+  assert.deepEqual(ok.json, { relayed: 'cx' })
+  await waitFor(() => submitted.length === 1)
+  assert.equal(submitted[0].text, 'Use port 8080')
+  const made_up = await call('POST', '/board/relay', { sessionId: coord.sessionId, to: 'cx', quote: 'delete the database' })
+  assert.equal(made_up.status, 403)
+  assert.equal((await call('POST', '/board/relay', { sessionId: coord.sessionId, to: 'cx', quote: 'port 80' })).status, 403) // whole words only
+  assert.equal((await call('POST', '/board/relay', { sessionId: cx.sessionId, to: 'boss', quote: 'use port 8080' })).status, 403)
+  assert.equal((await call('POST', '/board/relay', { sessionId: coord.sessionId, to: 'nobody', quote: 'x' })).status, 404)
+})

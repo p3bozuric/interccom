@@ -193,6 +193,32 @@ This support is new. Unit tests cover the device parsing and the commands, and i
 | 7.12 | Linux | `INTERCCOM_MIC=alsa:default` | Captures through ALSA instead. |
 | 7.13 | Linux | Rerun 2.2–2.5 | Plays through `ffplay`. |
 
+## 7d. Codex
+
+You need Codex CLI 0.166 or newer, signed in. In the cloud, everything below ran end to end against real processes, with a stand-in `codex` binary. Codex itself has not run with it yet.
+
+**Install as a plugin** (first try):
+```powershell
+codex plugin marketplace add C:\path\to\interccom    # or p3bozuric/interccom for the pushed branch's default
+codex plugin add interccom
+```
+**Or by hand:** `node C:\path\to\interccom\hub\cli.mjs codex-setup` and paste what it prints into `~/.codex/config.toml` and `~/.codex/hooks.json`. Settings come from `INTERCCOM_*` environment variables (e.g. `$env:INTERCCOM_TTS_ENGINE='local'`) set before starting `codex`, or from the MCP entry's `env`.
+
+Turn off Codex's own voice input for these tests.
+
+| # | Do | Expect |
+|---|---|---|
+| 7.14 | Start `codex` in a project folder | `Get-Board` shows a row with `host: codex`. Within a turn or so, `hostSessionId` is filled in (the SessionStart hook bound it). Codex may first ask you to trust the hooks. |
+| 7.15 | Ask Codex: "What does interccom ask you to do?" | It describes the speaking guidance. If not, record whether it saw the MCP `instructions`, the SessionStart context, both or neither. |
+| 7.16 | "Tell me out loud when you're done: list the files here." | One short spoken line through the hub, with a `shop:`-style name prefix if more sessions are connected. |
+| 7.17 | Give a long task, then say "Hey Claude, also count the lines" mid-task | Codex acknowledges it at its next tool step (PostToolUse context). |
+| 7.18 | Say something as Codex is finishing a turn | The turn continues with it (Stop blocked once) rather than ending. |
+| 7.19 | With Codex idle, say "Hey Claude, what changed?" | Codex starts a new turn with it (`codex queue … --resume`). **Record whether it shows up in the open TUI**, or only in the daemon or another session. |
+| 7.20 | Codex and Claude Code sessions both open: "Hey Claude, <codex-name>: hi" | Only the Codex session gets it. |
+| 7.21 | Make a Claude Code session coordinator. Say "Hey Claude, tell <codex-name> to run the tests" | The coordinator relays your words with `board` `relay`. Codex receives "run the tests" (or your full phrasing). Ask the coordinator to tell Codex something you never said: refused (403). |
+| 7.22 | `/interccom coordinator` can't be run in Codex, but check: Codex speaking while a coordinator runs | Codex's lines arrive at the coordinator as reports, not as audio. |
+| 7.23 | Rename `codex` off PATH (or set `INTERCCOM_CODEX_BIN` to a wrong path), speak while idle | One error naming `INTERCCOM_CODEX_BIN`. The speech is kept and delivered at Codex's next hook. |
+
 ## 8. Things that couldn't be verified in the cloud: check them
 
 These are assumptions about Claude Code's plugin API that only a real session can confirm.
@@ -202,6 +228,11 @@ These are assumptions about Claude Code's plugin API that only a real session ca
 3. **The tool name `mcp__interccom__board`** (check 4.6). It's assumed to follow the same naming as `mcp__interccom__speak`.
 4. **ListAgents / SendMessage / idle notices** (check 4.7). They're built into Claude Code. Confirm they're available in your local version and permission mode. If the worker is in a different permission mode, the message waits for approval, and the coordinator should say so.
 5. **Command quoting on Windows** (7b). Paths with spaces in `tts_command` and `stt_command`.
+6. **Codex plugin format** (7d). Check that `.codex-plugin/plugin.json`, `hosts/codex/mcp.json` and `hosts/codex/hooks.json` load, that `${PLUGIN_ROOT}` expands in hook commands, and that the marketplace is found through `.claude-plugin/marketplace.json`. These were inferred from the Codex 0.166 binary, not from docs.
+7. **Codex specifics** (7d):
+   - Whether the MCP server gets `CODEX_THREAD_ID` (if not, binding falls back to the folder).
+   - Whether the MCP server's working directory is the project folder (folder binding needs it; otherwise `--cwd`).
+   - Whether `codex queue --resume` reaches the open TUI.
 
 ## 9. Results template
 
