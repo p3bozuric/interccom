@@ -41,13 +41,22 @@ function baseName(dir) {
   return String(dir).split(/[\\/]+/).filter(Boolean).pop() || 'session'
 }
 
+export function defaultStateDir(env = process.env) {
+  return env.INTERCCOM_STATE_DIR || path.join(os.homedir(), '.interccom')
+}
+
+export const HUB_ENTRY = fileURLToPath(new URL('./main.mjs', import.meta.url))
+
 // The session's link to the hub. All network access goes through `call`.
+// delivery: pull (hooks drain the hub's inbox: Codex), push (heard speech arrives here,
+// passed to onHeard: Copilot, OpenCode), or none (speak-only MCP hosts).
 export function createHostLink({
-  host, name, cwd, env = process.env, stateDir, hubEntry,
+  host, name, cwd, env = process.env, stateDir = defaultStateDir(env), hubEntry = HUB_ENTRY,
+  delivery = PULL_HOSTS.has(host) ? 'pull' : 'none', onHeard = () => {}, onError = () => {},
   ensure = ensureHub, fetchFn = globalThis.fetch, log = () => {}, backoffMs = [2000, 30000],
 }) {
-  const delivery = PULL_HOSTS.has(host) ? 'pull' : 'none'
-  const tag = delivery === 'pull' ? randomUUID() : ''
+  const tag = delivery === 'none' ? '' : randomUUID()
+  let busy = false
   let hostSessionId = env.CODEX_THREAD_ID && host === 'codex' ? String(env.CODEX_THREAD_ID) : ''
   let hub = null // { port, token }
   let sessionId = ''
@@ -75,7 +84,14 @@ export function createHostLink({
   function onEvent(msg) {
     if (msg.type === 'bound' && typeof msg.hostSessionId === 'string') hostSessionId = msg.hostSessionId
     else if (msg.type === 'hello' && typeof msg.name === 'string') currentName = msg.name
-    else if (msg.type === 'error') { lastError = String(msg.message ?? ''); log(`interccom: ${lastError}`) }
+    else if (msg.type === 'error') { lastError = String(msg.message ?? ''); log(`interccom: ${lastError}`); onError(lastError) }
+    else if (msg.type === 'heard' && typeof msg.text === 'string' && msg.text.trim()) onHeard(msg.text.trim())
+  }
+
+  // Best effort, like the Claude Code plugin: never blocks or throws.
+  function post(p, body) {
+    if (!sessionId) return
+    void call('POST', p, body).catch(() => undefined)
   }
 
   async function connectOnce() {
@@ -84,6 +100,8 @@ export function createHostLink({
     const reg = await call('POST', '/sessions', { name, cwd, pid: process.pid, host, delivery, hostSessionId, tag })
     sessionId = reg.sessionId
     currentName = reg.name
+    // A new registration starts idle on the hub: bring it up to date.
+    if (busy) post(`/sessions/${encodeURIComponent(sessionId)}/state`, { busy })
     const ac = new AbortController()
     stream = ac
     const res = await fetchFn(`http://127.0.0.1:${hub.port}/events?session=${encodeURIComponent(sessionId)}`, {
@@ -131,6 +149,12 @@ export function createHostLink({
     name: () => currentName,
     hostSessionId: () => hostSessionId,
     lastError: () => lastError,
+    setBusy(b) {
+      if (b === busy) return
+      busy = b
+      post(`/sessions/${encodeURIComponent(sessionId)}/state`, { busy })
+    },
+    markActive() { post(`/sessions/${encodeURIComponent(sessionId)}/active`, {}) },
   }
 }
 
@@ -139,6 +163,7 @@ function text(t, isError = false) {
 }
 
 export async function callTool(link, toolName, args = {}) {
+  toolName = String(toolName ?? '').replace(/^interccom_/, '')
   if (toolName === 'speak') {
     const said = String(args.text ?? '').trim()
     if (!said) return text('Nothing to say.')
@@ -191,14 +216,9 @@ export async function handleMessage(msg, { link, instructions, version }) {
 
 export async function runMcp({ host = 'mcp', name, cwd = process.cwd(), version = '0.0.0', env = process.env } = {}) {
   const sessionName = name || baseName(cwd)
-  const link = createHostLink({
-    host, name: sessionName, cwd, env,
-    stateDir: env.INTERCCOM_STATE_DIR || path.join(os.homedir(), '.interccom'),
-    hubEntry: fileURLToPath(new URL('./main.mjs', import.meta.url)),
-    log: m => process.stderr.write(`${m}\n`),
-  })
+  const link = createHostLink({ host, name: sessionName, cwd, env, log: m => process.stderr.write(`${m}\n`) })
   link.start()
-  const instructions = link.tag ? hostGuidance(sessionName, link.tag) : genericInstructions(sessionName)
+  const instructions = link.delivery === 'pull' ? hostGuidance(sessionName, link.tag) : genericInstructions(sessionName)
   let buf = ''
   let chain = Promise.resolve()
   process.stdin.setEncoding('utf8')

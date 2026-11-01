@@ -1,7 +1,7 @@
 // ensureHub: guarantee exactly one hub process, starting it detached if needed.
 import { spawn } from 'node:child_process'
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
-import { mkdirSync, readFileSync, renameSync, rmSync, unlinkSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, unlinkSync, statSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 
 const POLL_MS = 100
@@ -50,6 +50,27 @@ export function hubEnv(env = process.env) {
   return Object.fromEntries(Object.entries(env).filter(([k]) => !KEY_VARS.has(k.toUpperCase())))
 }
 
+// The Node that runs the hub. Inside another program (OpenCode is a Bun binary, Copilot CLI a
+// packaged one) process.execPath is that program, not Node: then find node on PATH.
+// INTERCCOM_NODE overrides. Windows also searches the cwd for a bare name, so return a full path.
+export function resolveNode({
+  env = process.env, platform = process.platform, execPath = process.execPath,
+  versions = process.versions, exists = existsSync,
+} = {}) {
+  if (env.INTERCCOM_NODE) return env.INTERCCOM_NODE
+  const p = platform === 'win32' ? path.win32 : path.posix
+  const base = p.basename(execPath).toLowerCase()
+  if (!versions.bun && (base === 'node' || base === 'node.exe')) return execPath
+  const sep = platform === 'win32' ? ';' : ':'
+  const join = p.join
+  const name = platform === 'win32' ? 'node.exe' : 'node'
+  for (const dir of String(env.PATH ?? env.Path ?? '').split(sep).filter(Boolean)) {
+    const candidate = join(dir, name)
+    if (exists(candidate)) return candidate
+  }
+  throw new Error("interccom couldn't find Node.js to run its hub. Install Node 18.3 or newer, or set INTERCCOM_NODE to node's full path.")
+}
+
 function tryLock(lockDir) {
   try {
     mkdirSync(lockDir)
@@ -78,7 +99,7 @@ function lockIsStale(lockDir) {
   }
 }
 
-export async function ensureHub({ stateDir, hubEntry, timeoutMs = 12_000 }) {
+export async function ensureHub({ stateDir, hubEntry, timeoutMs = 12_000, node }) {
   stateDir = path.resolve(stateDir)
   mkdirSync(stateDir, { recursive: true })
   const lockDir = path.join(stateDir, 'launch.lock')
@@ -100,7 +121,7 @@ export async function ensureHub({ stateDir, hubEntry, timeoutMs = 12_000 }) {
       const again = await probe(stateDir)
       if (again) return again
       // cwd is the state dir so Windows never searches an untrusted caller cwd.
-      const child = spawn(process.execPath, [hubEntry, '--state-dir', stateDir], {
+      const child = spawn(node ?? resolveNode(), [hubEntry, '--state-dir', stateDir], {
         detached: true, stdio: 'ignore', windowsHide: true, cwd: stateDir, env: hubEnv(),
       })
       let spawnError = null

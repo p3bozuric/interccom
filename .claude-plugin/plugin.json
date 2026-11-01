@@ -1,6 +1,6 @@
 {
   "name": "interccom",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "One voice for all your Claude Code sessions: hear conclusions and questions, talk back hands-free.",
   "license": "MIT",
   "userConfig": {

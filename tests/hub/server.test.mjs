@@ -704,3 +704,15 @@ test('relay: the coordinator passes the person\'s own recent words to a Codex wo
   assert.equal((await call('POST', '/board/relay', { sessionId: cx.sessionId, to: 'boss', quote: 'use port 8080' })).status, 403)
   assert.equal((await call('POST', '/board/relay', { sessionId: coord.sessionId, to: 'nobody', quote: 'x' })).status, 404)
 })
+
+test('relay reaches push sessions of other agents (Copilot, OpenCode) over their stream', async () => {
+  const { hub, call, register, open } = await start()
+  const coord = await register('boss')
+  await open(coord.sessionId)
+  await call('POST', `/sessions/${coord.sessionId}/role`, { role: 'coordinator' })
+  const cp = (await call('POST', '/sessions', { name: 'cp', cwd: '/w/cp', host: 'copilot', delivery: 'push', tag: 'T' })).json
+  const cs = await open(cp.sessionId)
+  await hub.hear('Hey Claude, cp: rerun the flaky test')
+  assert.deepEqual((await call('POST', '/board/relay', { sessionId: coord.sessionId, to: 'cp', quote: 'rerun the flaky test' })).json, { relayed: 'cp' })
+  assert.deepEqual(await cs.line(1), { type: 'heard', text: 'rerun the flaky test' })
+})

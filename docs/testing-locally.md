@@ -1,6 +1,6 @@
 # Testing interccom locally (Windows)
 
-This guide is for testing on a real PC: you, or a Claude Code session you run there and point at this file. It covers v0.1 core, the **coordinator** and the **local speech engines**.
+This guide is for testing on a real PC: you, or a Claude Code session you run there and point at this file. It covers v0.1 core, the **coordinator**, the **local speech engines**, macOS/Linux audio, and the other agents: **Codex**, **GitHub Copilot CLI** and **OpenCode**.
 
 The automated tests run in the cloud with fakes. Nothing there touches a real microphone, real speakers, or a real Claude Code session that loads the plugin. Those are what this guide checks.
 
@@ -219,6 +219,52 @@ Turn off Codex's own voice input for these tests.
 | 7.22 | `/interccom coordinator` can't be run in Codex, but check: Codex speaking while a coordinator runs | Codex's lines arrive at the coordinator as reports, not as audio. |
 | 7.23 | Rename `codex` off PATH (or set `INTERCCOM_CODEX_BIN` to a wrong path), speak while idle | One error naming `INTERCCOM_CODEX_BIN`. The speech is kept and delivered at Codex's next hook. |
 
+## 7e. GitHub Copilot CLI
+
+You need Copilot CLI 1.0+, signed in (`copilot login`). In the cloud, the loader file `copilot-setup` writes ran against a real hub, with a stand-in for Copilot's SDK module: it joined with both tools and three hooks, injected the guidance, spoke, and passed heard speech to `session.send`. Copilot itself has not loaded it yet.
+
+```powershell
+node C:\path\to\interccom\hub\cli.mjs copilot-setup    # writes ~/.copilot/extensions/interccom/extension.mjs
+copilot                                                     # start in a project folder
+```
+
+Turn off Copilot's own voice input for these tests.
+
+| # | Do | Expect |
+|---|---|---|
+| 7.24 | Start `copilot` | `Get-Board` shows `host: copilot`, named after the folder. `/env` (or Copilot's extension list) shows the interccom extension. |
+| 7.25 | "Say out loud what this project is." | Copilot calls `interccom_speak`, and you hear one short line. |
+| 7.26 | Long task, then "Hey Claude, also check the README" mid-task | Arrives with the next tool result (`onPostToolUse` context), and Copilot acknowledges it. |
+| 7.27 | Idle: "Hey Claude, what did you change?" | Appears as your next message in the open Copilot window, and a turn starts. |
+| 7.28 | Several sessions: "Hey Claude, <copilot-name>: hi" | Only the Copilot session gets it. |
+| 7.29 | Coordinator in a Claude Code session: "Hey Claude, tell <copilot-name> to run the tests" | Relayed with `board` `relay`, and Copilot receives the words. |
+| 7.30 | `interccom copilot-setup --remove`, restart Copilot | The extension is gone, and so is the board row. |
+
+## 7f. OpenCode
+
+You need OpenCode 1.19+ with a model provider configured. **In the cloud this ran against real OpenCode 1.19.5** (`opencode serve`):
+- the plugin loaded from the file `opencode-setup` wrote, and OpenCode installed `@opencode-ai/plugin` by itself;
+- the hub started from inside OpenCode;
+- the session showed on the board as `host: opencode`;
+- `interccom_speak` and `interccom_board` were in OpenCode's tool list;
+- typed speech became a real user message in the session.
+
+The model's side (guidance, speaking, mid-turn notes) needs a provider, which the cloud container didn't have.
+
+```powershell
+node C:\path\to\interccom\hub\cli.mjs opencode-setup    # writes ~/.config/opencode/plugins/interccom.js
+opencode                                                     # start in a project folder
+```
+
+| # | Do | Expect |
+|---|---|---|
+| 7.31 | Start `opencode` | `Get-Board` shows `host: opencode`. The first start may take a moment while OpenCode installs `@opencode-ai/plugin` in its config folder. |
+| 7.32 | "Say out loud what this project is." | OpenCode calls `interccom_speak`, and you hear it. |
+| 7.33 | Long task, then speak mid-task | The voice note is appended to the next tool's output, and OpenCode acknowledges it. |
+| 7.34 | Idle: speak | It becomes your next message in the open TUI, and a turn starts. |
+| 7.35 | Ask OpenCode to use a subagent, and speak while it runs | The speech goes to your main session, never to the subagent. |
+| 7.36 | Two OpenCode windows on the same project, then switch between them | Speech goes to the session you last sent a message in. Record whether that holds across windows: each `opencode` process has its own plugin instance. |
+
 ## 8. Things that couldn't be verified in the cloud: check them
 
 These are assumptions about Claude Code's plugin API that only a real session can confirm.
@@ -233,6 +279,8 @@ These are assumptions about Claude Code's plugin API that only a real session ca
    - Whether the MCP server gets `CODEX_THREAD_ID` (if not, binding falls back to the folder).
    - Whether the MCP server's working directory is the project folder (folder binding needs it; otherwise `--cwd`).
    - Whether `codex queue --resume` reaches the open TUI.
+8. **Copilot extension** (7e): that Copilot loads `~/.copilot/extensions/interccom/extension.mjs`, and resolves `@github/copilot-sdk/extension` for a loader that imports interccom from outside that folder. Also that `session.send` shows in the open window, and that `onPostToolUse` context reaches the model.
+9. **OpenCode, model side** (7f): that `experimental.chat.system.transform` guidance reaches the model, and that the voice note appended in `tool.execute.after` is seen.
 
 ## 9. Results template
 

@@ -270,7 +270,7 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
   function setRole(id, role, takeover, t) {
     if (!ROLES.has(role)) throw new HttpError(400, 'role must be worker or coordinator')
     const row = session(id)
-    if (role === 'coordinator' && row.delivery !== 'push') throw new HttpError(400, 'only Claude Code sessions can be the coordinator for now')
+    if (role === 'coordinator' && row.host !== 'claude-code') throw new HttpError(400, 'only Claude Code sessions can be the coordinator for now')
     if (role === 'coordinator') {
       const current = board.coordinator()
       if (current && current !== row) {

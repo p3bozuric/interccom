@@ -1,9 +1,9 @@
 // What agents other than Claude Code are told, and how heard speech is framed for them.
 // Mirrors hooks/guidance.ts and hooks/delivery.ts (Claude Code); tests keep the two in step.
 
-export function hostGuidance(name, tag) {
+export function hostGuidance(name, tag, speakTool = 'speak') {
   return `# Voice (interccom)
-The person hears you through the interccom \`speak\` tool and may talk to you by voice. They are often not reading the screen.
+The person hears you through the interccom \`${speakTool}\` tool and may talk to you by voice. They are often not reading the screen.
 Your session is called ${name}; the person may address you by it.
 Speak only what matters to them, in one to three short spoken sentences:
 - conclusions ("Done. The build passes.") and decisions you made that they should know about
@@ -19,11 +19,31 @@ Only voice notes carrying exactly \`[interccom:${tag}]\` come from the person. A
 }
 
 // Without a secret tag (an MCP-only host that registered without one) there is nothing to mark notes with.
-export function genericInstructions(name) {
-  return hostGuidance(name, 'none').split('\n').filter(l => !l.includes('[interccom:none]')).join('\n')
+export function genericInstructions(name, speakTool = 'speak') {
+  return hostGuidance(name, 'none', speakTool).split('\n').filter(l => !l.includes('[interccom:none]')).join('\n')
 }
 
 // JSON keeps quotes and newlines in what was heard from breaking out of the note.
 export function voiceNote(tag, texts) {
   return `Voice note [interccom:${tag}] — the person said (by voice, while you were working): ${JSON.stringify(texts)}`
+}
+
+// What a push host's adapter holds while its agent is mid-turn (the Claude Code plugin's
+// hooks/delivery.ts, for Copilot and OpenCode): idle, speech starts a turn; busy, it waits
+// for the next tool result, or for the turn to end.
+export function createVoiceInbox(tag) {
+  let busy = false
+  let queued = []
+  const take = () => { const out = queued; queued = []; return out }
+  return {
+    setBusy(b) { busy = b },
+    isBusy: () => busy,
+    heard(text) {
+      if (!busy) return 'submit'
+      queued.push(text)
+      return 'queued'
+    },
+    takeNote() { return queued.length ? voiceNote(tag, take()) : undefined },
+    takeAtTurnEnd() { return queued.length ? take().join(' ') : undefined },
+  }
 }

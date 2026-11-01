@@ -3,6 +3,8 @@
 //   interccom mcp [--host codex] [--name <n>] [--cwd <dir>]   MCP server for any agent
 //   interccom codex-hook                                      Codex command hook (stdin JSON)
 //   interccom codex-setup                                     print manual Codex config
+//   interccom copilot-setup [--print|--remove]                install the Copilot CLI extension
+//   interccom opencode-setup [--print|--remove]               install the OpenCode plugin
 //   interccom --version
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -17,6 +19,8 @@ Usage:
   interccom mcp [--host codex] [--name <name>] [--cwd <dir>]
   interccom codex-hook
   interccom codex-setup
+  interccom copilot-setup [--print | --remove]
+  interccom opencode-setup [--print | --remove]
   interccom --version`
 
 // TOML basic strings and JSON share escaping for what a path can contain.
@@ -62,6 +66,21 @@ async function main(argv) {
     return
   }
   if (cmd === 'codex-setup') { process.stdout.write(codexSetupText()); return }
+  if (cmd === 'copilot-setup' || cmd === 'opencode-setup') {
+    const { values } = parseArgs({ args: rest, options: { print: { type: 'boolean' }, remove: { type: 'boolean' } } })
+    const setup = await import('./hosts/setup.mjs')
+    const copilot = cmd === 'copilot-setup'
+    const file = copilot ? setup.copilotTarget() : setup.opencodeTarget()
+    const content = copilot ? setup.copilotLoader() : setup.opencodeLoader()
+    if (values.print) { process.stdout.write(`# ${file}\n${content}`); return }
+    console.log(setup.installLoader(file, content, { remove: values.remove }))
+    if (!values.remove) {
+      console.log(copilot
+        ? 'Restart Copilot CLI (or run /clear) to load it. Keep Copilot\'s own voice input off while interccom listens.'
+        : 'Restart OpenCode to load it. Settings: INTERCCOM_* environment variables, set before starting opencode.')
+    }
+    return
+  }
   console.log(USAGE)
   if (cmd && cmd !== 'help' && cmd !== '--help' && cmd !== '-h') process.exitCode = 1
 }

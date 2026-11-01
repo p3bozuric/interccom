@@ -2,7 +2,7 @@
 
 **Talk to your coding agents. Let them talk back.**
 
-interccom gives Claude Code and Codex sessions a voice and ears. Claude says out loud only what you need to hear: conclusions, questions, heads-ups. It never reads out reasoning, code or file paths. You answer by just talking. No push-to-talk, no Enter key, and you can do it while Claude is mid-task.
+interccom gives your coding agents a voice and ears: Claude Code, Codex, GitHub Copilot CLI and OpenCode. The agent says out loud only what you need to hear: conclusions, questions, heads-ups. It never reads out reasoning, code or file paths. You answer by just talking. No push-to-talk, no Enter key, and you can do it while Claude is mid-task.
 
 Run several sessions at once and they share one voice channel. They take turns, each says its name, and you can address one by name: *"Hey Claude, frontend: run the tests."* Or make one session the **coordinator**: you talk only to it, and it keeps track of the others for you.
 
@@ -26,28 +26,54 @@ Speech can run in the cloud (ElevenLabs) or entirely on your machine (any OpenAI
   - If Claude is idle, it arrives as your next message.
   - If Claude is mid-task, it's attached to Claude's next step, so Claude can change course right away.
 
-## Codex
+## Other coding agents: Codex, Copilot CLI, OpenCode
 
-interccom also works with [Codex CLI](https://github.com/openai/codex) (0.166 or newer). Codex sessions join the same voice channel as Claude Code sessions: one voice at a time, addressable by name, on the same board. With a coordinator running, they report to it.
+Sessions of every supported agent share one voice channel: one voice at a time, addressable by name ("Hey Claude, *api*: …", whatever the agent), all on the same board. With a coordinator running, they report to it.
 
-Install it as a Codex plugin from this repository:
+| Agent | Install | How it hears you |
+|---|---|---|
+| Claude Code | `/plugin install interccom@interccom` (see [Install](#install)) | in-process plugin |
+| Codex CLI 0.166+ | `codex plugin marketplace add p3bozuric/interccom`, then `codex plugin add interccom` | hooks + `codex queue` |
+| GitHub Copilot CLI 1.0+ | `npx -y interccom copilot-setup` | in-process extension |
+| OpenCode 1.19+ | `npx -y interccom opencode-setup` | in-process plugin |
+| Any other MCP agent | add `interccom mcp` as an MCP server | speaks only, can't hear yet |
 
-```
-codex plugin marketplace add p3bozuric/interccom
-codex plugin add interccom
-```
+Until the npm package is published, run the same commands from a clone: `node path/to/interccom/hub/cli.mjs copilot-setup`.
 
-Or set it up by hand with `npx -y interccom codex-setup` (once the npm package is published), or with `node path/to/interccom/hub/cli.mjs codex-setup` from a clone. Either prints a `~/.codex/config.toml` entry and a `~/.codex/hooks.json` to add. Codex may ask you to trust the hooks the first time.
+- **Setup commands:**
+  - `copilot-setup` writes `~/.copilot/extensions/interccom/extension.mjs`.
+  - `opencode-setup` writes `~/.config/opencode/plugins/interccom.js`.
+  - Each is a few lines that load interccom from wherever it's installed, so updating interccom needs no new setup. `--print` shows the file without writing it, and `--remove` deletes it. Neither command ever overwrites a file interccom didn't write.
+- **Settings:** these agents have no interccom settings screen, so set the same options as `INTERCCOM_*` environment variables before you start the agent. For example: `INTERCCOM_TTS_ENGINE=local`, `INTERCCOM_STT_ENGINE=local`, `ELEVENLABS_API_KEY=…`. The hub uses the settings of whichever session connected most recently.
+- **Node.js:** the hub always runs on Node, even inside OpenCode (a Bun program) or Copilot. interccom finds `node` on PATH; set `INTERCCOM_NODE` if it's elsewhere.
+- **Built-in voice:** Codex and Copilot CLI have voice input of their own. Keep it off while interccom listens, because only one program can own the mic.
+- **Coordinator:** only a Claude Code session can be the coordinator, and Claude Code's SendMessage can't reach other agents. The coordinator can still pass your exact words to them (`relay`), but never instructions of its own.
 
-- **Settings:** Codex has no plugin settings screen, so set the same options as `INTERCCOM_*` environment variables, either in your environment or in the MCP entry's `env`. For example: `INTERCCOM_TTS_ENGINE=local`, `INTERCCOM_STT_ENGINE=local`, `ELEVENLABS_API_KEY=…`. The hub uses the settings of whichever session connected most recently.
-- **How it hears:**
-  - Speech heard mid-turn is attached at Codex's next tool step.
-  - Speech heard as a turn ends keeps the turn going.
-  - Speech heard while Codex is idle is sent with `codex queue`. If Codex isn't on PATH as `codex`, set `INTERCCOM_CODEX_BIN`.
-- **Codex's own voice input:** keep it off while interccom listens. Only one program can own the mic.
-- **Coordinator:** Codex sessions can't be the coordinator yet, and Claude Code's SendMessage can't reach them. The coordinator can still pass your exact words to a Codex session (`relay`), but never instructions of its own.
+### Codex
 
-Other agents that support MCP can use `interccom mcp` to speak and show up on the board, but they can't hear yet.
+- **Hooks:** speech heard mid-turn is attached at Codex's next tool step, and speech heard as a turn ends keeps the turn going. Codex may ask you to trust the hooks the first time.
+- **Idle:** speech heard while Codex is idle goes through `codex queue`. If Codex isn't on PATH as `codex`, set `INTERCCOM_CODEX_BIN`.
+- **Manual setup:** without the plugin, `interccom codex-setup` prints a `~/.codex/config.toml` entry and a `~/.codex/hooks.json` to add.
+
+### GitHub Copilot CLI
+
+The extension runs alongside each Copilot session:
+- it adds the `interccom_speak` and `interccom_board` tools;
+- it puts the speaking guidance into the session;
+- speech heard mid-turn arrives with the next tool result;
+- speech heard while idle is sent as your next message.
+
+Restart Copilot (or `/clear`) after setup.
+
+### OpenCode
+
+The plugin runs inside the OpenCode server:
+- it adds `interccom_speak` and `interccom_board`;
+- it adds the guidance to the system prompt;
+- speech heard mid-turn is appended to the next tool result;
+- speech heard while idle is sent to the session you last used. Subagent sessions are ignored.
+
+OpenCode installs the `@opencode-ai/plugin` package the plugin needs by itself. Restart OpenCode after setup.
 
 ## Requirements
 
@@ -64,7 +90,7 @@ Other agents that support MCP can use `interccom mcp` to speak and show up on th
 
 ## Install
 
-In Claude Code (for Codex, see above):
+In Claude Code (for other agents, see above):
 
 ```
 /plugin marketplace add p3bozuric/interccom
@@ -161,7 +187,7 @@ After changing engines, close all sessions so the hub restarts with the new sett
 
 ## Roadmap
 
-- **More coding agents:** GitHub Copilot CLI and Gemini CLI hearing too, and Codex as a coordinator ([design](docs/superpowers/specs/2026-11-01-interccom-hosts.md)).
+- **More coding agents:** Gemini CLI and others hearing too, and a coordinator in agents other than Claude Code ([design](docs/superpowers/specs/2026-11-01-interccom-hosts.md)).
 - **Voice approvals:** approve or deny permission prompts by voice, with read-back and confirmation for anything destructive.
 - **Setup:** a `/interccom setup` guide and a mic picker.
 - **Claude Code desktop app and phone:** the PC goes quiet when you're on your phone.
@@ -175,7 +201,7 @@ claude plugin validate .
 
 Testing on a real Windows PC: [docs/testing-locally.md](docs/testing-locally.md).
 
-The npm package `interccom` (bin `interccom`: `mcp`, `codex-hook`, `codex-setup`) is the hub plus the adapters for agents other than Claude Code. `npm pack --dry-run` shows what it ships.
+The npm package `interccom` (bin `interccom`: `mcp`, `codex-hook`, `codex-setup`, `copilot-setup`, `opencode-setup`) is the hub plus the adapters for agents other than Claude Code. `npm pack --dry-run` shows what it ships.
 
 Design and plans live in `docs/superpowers/`.
 

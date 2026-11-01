@@ -1,7 +1,7 @@
 {
   "name": "interccom",
-  "version": "0.2.0",
-  "description": "One voice for all your coding agents (Claude Code, Codex, ...): hear conclusions and questions, talk back hands-free.",
+  "version": "0.3.0",
+  "description": "One voice for all your coding agents (Claude Code, Codex, GitHub Copilot CLI, OpenCode): hear conclusions and questions, talk back hands-free.",
   "license": "MIT",
   "type": "module",
   "repository": {
@@ -12,6 +12,8 @@
   "keywords": [
     "claude-code",
     "codex",
+    "copilot",
+    "opencode",
     "voice",
     "mcp",
     "speech",

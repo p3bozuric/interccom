@@ -65,6 +65,40 @@ Codex now has what interccom needs natively, so **Codex needs no terminal wrappe
 - **Idle delivery** runs `codex queue … --resume` from the hub side with the session's id, with no shell, and the session's cwd as `-C`.
 - **Coordinator relays to a Codex worker** use the same inbox. That is the `/sessions/:id/say` endpoint in section 3.
 
+### 2b. GitHub Copilot CLI: checked against 1.0.105 (owner: "GitHub CLI" means Copilot CLI)
+
+Copilot has an **extension** system that fits better than its hooks. An extension is `extension.mjs` in `~/.copilot/extensions/<name>/` (or `.github/extensions/` in a project). It runs as one forked Node process per foreground session and calls `joinSession()` from `@github/copilot-sdk/extension`, which Copilot resolves itself. From the SDK's own docs and types:
+- `tools: [{ name, description, parameters (JSON Schema), handler }]`
+- hooks `onSessionStart` → `additionalContext` (guidance), `onUserPromptSubmitted` / `onPostToolUse` → `additionalContext` (voice notes)
+- events `session.on('assistant.turn_start' | 'session.idle')`: busy/idle
+- `session.send({ prompt })` (enqueue by default): idle delivery
+- `session.log(...)`: errors in the timeline
+- **stdout is the JSON-RPC channel**, so nothing may print to it
+
+So Copilot is a **push** session, like Claude Code: the extension process is the link, and heard speech arrives on its event stream (`hub/hosts/copilot.mjs`). `interccom copilot-setup` writes a loader that imports `joinSession` and hands it to interccom by file URL.
+
+Copilot plugins (marketplaces, Claude-compatible hooks, MCP) exist too, but they can't carry an extension, and command hooks can't start a turn when idle. Copilot ships its own voice input (`voice-server.js`): keep it off.
+
+### 2c. OpenCode: checked against 1.19.5 (owner's addition)
+
+An OpenCode plugin is a JS/TS module in `{plugin,plugins}/*.{js,ts}` under `~/.config/opencode/` or the project's `.opencode/`. It runs inside the OpenCode server (Bun) for its whole life. OpenCode installs `@opencode-ai/plugin` into those folders itself. From its type definitions:
+- `tool: { name: tool({ description, args (zod, via tool.schema), execute }) }`
+- `experimental.chat.system.transform` → `output.system.push(...)`: guidance
+- `tool.execute.after` → append to `output.output`: voice notes mid-turn
+- `event` → `session.status` (busy/idle), `session.idle`, `session.created` (with `parentID` for subagents)
+- `chat.message`: the person sent a message in this session, which makes it the target
+- `client.session.promptAsync({ path: { id }, body: { parts: [{ type: 'text', text }] } })`: idle delivery
+- `client.tui.showToast`: errors
+
+Also a **push** session (`hub/hosts/opencode.mjs`). One OpenCode server can hold several sessions, so speech goes to the one the person last sent a message in, and subagent sessions are never targets. **Verified against real OpenCode 1.19.5** (`opencode serve`):
+- the loader loads;
+- `@opencode-ai/plugin` is installed automatically;
+- the tools are registered;
+- the session is on the board;
+- heard text becomes a user message.
+
+Found doing that: inside Bun, `process.execPath` is `opencode`, so the hub launcher now finds a real Node (`resolveNode`, `INTERCCOM_NODE`).
+
 ### 3. The coordinator stays a Claude Code session in v1
 
 Coordinator → worker messages use Claude Code's `SendMessage`, so permission boundaries hold. Other hosts don't have that. For a non-Claude worker:
@@ -91,16 +125,20 @@ Done: `hub/audio/{windows,macos,linux}.mjs`, selected by `hub/audio/index.mjs`. 
    - testing guide §7d
 5. ✅ **Coordinator relay** to non-Claude workers: `POST /board/relay`, exposed as `board` `relay` { to, quote }. The hub only passes on a quote of what the person said to the coordinator in the last 15 minutes, matched on whole words. This replaces the `/sessions/:id/say` sketch in section 3.
 - **npm:** the package is named `interccom` (owner), with bin `interccom`. It isn't published yet: run `npm publish` when ready.
-6. **Copilot CLI, Gemini CLI**: the same pattern where their hooks allow it; the wrapper only for a host without hooks.
-7. Later: local wake-word and VAD models (the transcribe-then-match approach sends room audio to the STT engine; with a local STT engine that's already on-device).
+6. ✅ **GitHub Copilot CLI** (2b): `hub/hosts/copilot.mjs`, `interccom copilot-setup`, testing guide §7e.
+7. ✅ **OpenCode** (2c): `hub/hosts/opencode.mjs`, `interccom opencode-setup`, testing guide §7f.
+8. **Next:** Gemini CLI and others, following the same pattern where their plugin/hook APIs allow it. The wrapper is only for a host with none. Also: a coordinator in an agent other than Claude Code.
+9. Later: local wake-word and VAD models (the transcribe-then-match approach sends room audio to the STT engine; with a local STT engine that's already on-device).
 
 ## Decisions
 
 - First host after Claude Code: **Codex** (owner).
 - npm package name: **`interccom`** (owner).
 - Native dependency: **none**. Codex integrates through hooks + MCP + `codex queue`; the wrapper is deferred, and would be a separate optional package (builder's recommendation, accepted).
+- "GitHub CLI" means **GitHub Copilot CLI** (owner). **OpenCode** is supported too (owner).
+- Only Claude Code sessions can be the coordinator for now, because the role relies on SendMessage (builder).
 
 ## Open questions for the owner
 
-- Does "GitHub CLI" mean Copilot CLI (assumed above)?
+None right now.
 
