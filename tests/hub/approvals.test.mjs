@@ -27,8 +27,9 @@ test('deletes, pushes, publishing and outward MCP calls need a second "confirm"'
 const A = { id: 'a', name: 'api', confirming: false }
 const W = { id: 'w', name: 'web-2', confirming: false }
 
-test('answers: explicit phrases settle the newest request, or the one named', () => {
-  assert.deepEqual(matchAnswer('Approve.', [A, W]), { action: 'approve', id: 'w' })
+test('answers: explicit phrases settle the only request, or the one named', () => {
+  assert.deepEqual(matchAnswer('Approve.', [A]), { action: 'approve', id: 'a' })
+  assert.equal(matchAnswer('Approve.', [A, W]), undefined, 'two open: approving needs a name')
   assert.deepEqual(matchAnswer('yes, approve it', [A]), { action: 'approve', id: 'a' })
   assert.deepEqual(matchAnswer('deny', [A, W]), { action: 'deny', id: 'w' })
   assert.deepEqual(matchAnswer('No.', [A]), { action: 'deny', id: 'a' })
@@ -50,6 +51,8 @@ test('answers: a bare "yes" only with exactly one request; anything longer is no
 test('answers: "confirm" settles only a request waiting for it; "yes" never confirms', () => {
   const C = { id: 'c', name: 'api', confirming: true }
   assert.deepEqual(matchAnswer('confirm', [W, C]), { action: 'confirm', id: 'c' })
+  assert.equal(matchAnswer('confirm', [C, { ...C, id: 'c2', name: 'web' }]), undefined, 'two waiting to confirm: name one')
+  assert.deepEqual(matchAnswer('confirm web', [C, { ...C, id: 'c2', name: 'web' }]), { action: 'confirm', id: 'c2' })
   assert.equal(matchAnswer('confirm', [A, W]), undefined)
   assert.equal(matchAnswer('yes', [C]), undefined)
   assert.deepEqual(matchAnswer('deny', [C]), { action: 'deny', id: 'c' })

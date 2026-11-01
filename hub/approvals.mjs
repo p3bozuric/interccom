@@ -60,6 +60,9 @@ export function isDestructive(tool, input = {}) {
 // A spoken answer to the open requests, or undefined when it isn't one. `open` is newest last:
 // { id, name, confirming }. The utterance must be the answer alone ("approve", "deny api",
 // "api, approve"), so speech that merely contains "yes" or "no" never settles anything.
+// Approving or confirming without a name needs exactly one request it could mean, so a
+// request that arrives just before the answer is never approved by mistake; denying without
+// a name goes to the newest, since a wrong deny only costs a retry.
 export function matchAnswer(text, open) {
   if (!open.length) return undefined
   const w = words(text)
@@ -79,12 +82,12 @@ export function matchAnswer(text, open) {
   const newest = list => list.at(-1)
   const confirming = open.filter(a => a.confirming)
   if (CONFIRM.has(phrase)) {
-    const a = target?.confirming ? target : newest(confirming)
+    const a = target ? (target.confirming ? target : undefined) : (confirming.length === 1 ? confirming[0] : undefined)
     return a ? { action: 'confirm', id: a.id } : undefined
   }
   if (APPROVE.has(phrase)) {
-    const a = target ?? newest(open)
-    return { action: 'approve', id: a.id }
+    const a = target ?? (open.length === 1 ? open[0] : undefined)
+    return a ? { action: 'approve', id: a.id } : undefined
   }
   if (DENY.has(phrase)) {
     const a = target ?? newest(open)

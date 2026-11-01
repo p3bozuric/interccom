@@ -22,6 +22,9 @@ test('the PermissionRequest finds its tool.check by tool and input, once', () =>
   assert.equal(takeEligible('Bash', { command: 'rm -rf x' }), undefined)
   assert.equal(takeEligible('Bash', { command: 'npm test' }), 't1')
   assert.equal(takeEligible('Bash', { command: 'npm test' }), undefined)
+  rememberCheck(call('Bash'), ask)
+  rememberCheck(call('Bash'), { decision: 'ask', decider: 'person' }) // checked again, now not for voice
+  assert.equal(takeEligible('Bash', { command: 'npm test' }), undefined)
   rememberCheck(call('Bash'), ask, 0)
   rememberCheck(call('Edit'), ask) // 5 minutes later: the old one is dropped
   assert.equal(takeEligible('Bash', { command: 'npm test' }), undefined)

@@ -29,7 +29,10 @@ export function voiceEligible(e: CheckEvent, v: Verdict): boolean {
 
 export function rememberCheck(e: CheckEvent, v: Verdict, now = Date.now()): void {
   for (const [k, r] of eligible) if (now - r.at > REMEMBER_MS) eligible.delete(k)
-  if (voiceEligible(e, v)) eligible.set(requestKey(e.tool, e.input), { toolUseId: String(e.tool_use_id), at: now })
+  const key = requestKey(e.tool, e.input)
+  // A later check of the same call that may not be answered by voice clears an earlier one.
+  if (voiceEligible(e, v)) eligible.set(key, { toolUseId: String(e.tool_use_id), at: now })
+  else eligible.delete(key)
 }
 
 // The call's tool_use_id when tool.check found it may be answered by voice; used once.

@@ -34,8 +34,9 @@ Not provable from types, so left to check on a real machine (testing-locally.md 
 4. Answers (hub/approvals.mjs `matchAnswer`):
    - The whole utterance must be the answer, at most 7 words, with or without the wake word.
    - "approve / allow / yes approve", "deny / no / don't allow", and "confirm".
-   - A session name at either end picks that session's request; otherwise the newest request.
-   - A bare "yes" counts only when exactly one request is open, and never as a confirm.
+   - A session name at either end picks that session's request.
+   - Approving or confirming without a name needs exactly one request it could mean, so a request that arrives just before the answer is never approved by mistake. An unnamed deny goes to the newest request; a wrong deny only costs a retry.
+   - A bare "yes" counts only when exactly one request is open, and never as a confirm. Only "confirm" lets a destructive request through; another "approve" just asks for the confirm again.
 5. Destructive or outward-facing actions are read back and need "confirm". These are:
    - shell commands that delete, push, reset hard, publish, merge PRs, deploy, or drop/truncate data;
    - MCP tools whose names send, post, publish, delete, merge, deploy, email or message.
@@ -44,5 +45,6 @@ Not provable from types, so left to check on a real machine (testing-locally.md 
 
 - 60 s voice timeout, 4 s polls, 60 s to keep an answer, 10 min before a request is stale.
 - No wake word is needed for an answer while a request is open, because the answer must be the whole utterance. Speech that merely contains "yes" or "no" never counts.
+- After the automated security review: a destructive request can't be approved by repeating "approve"; an unnamed approve or confirm with several requests open does nothing; a later `tool.check` of the same call that isn't for voice clears the remembered one.
 - No chime-only answers: approving and denying both play the "sent" chime; the confirm read-back is spoken.
 - The board (`/interccom status`, `mcp__interccom__board`) lists waiting requests, so the coordinator can mention them.

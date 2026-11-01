@@ -112,7 +112,7 @@ Claude Code asks which engines to use for talking and listening. Add the API key
 When a session asks for permission (to run a command, edit a file, use a tool), interccom says so: "api wants to run npm test. Approve?" Answer out loud, or in the dialog as usual: whichever comes first wins.
 
 - **Approve:** "approve", "yes, approve" or "allow". **Deny:** "deny", "no" or "don't allow". A bare "yes" counts only when exactly one request is open.
-- **Which one:** your answer goes to the newest request; name the session to pick another ("approve api", "web two, deny").
+- **Which one:** with several requests open, name the session to approve ("approve api", "web two, confirm"). An unnamed "deny" goes to the newest.
 - **Destructive or outward-facing** (deletes, pushes, publishing, deploys, sending messages): it reads the action back and waits for "confirm".
 - The answer has to be just that, with or without "Hey Claude"; "yes" or "no" inside a longer sentence never counts.
 - No answer within a minute: the dialog alone decides. Nothing is ever allowed silently.

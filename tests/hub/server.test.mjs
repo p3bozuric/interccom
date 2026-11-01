@@ -835,6 +835,8 @@ test('approvals: destructive requests are read back and need "confirm"; "yes" is
   assert.equal(audio.played[1], 'Confirm: api will run git push --force. Say confirm, or deny.')
   await hub.hear('yes')
   assert.equal((await call('GET', `/approvals/${req.id}`)).json.status, 'confirming')
+  await hub.hear('approve') // approving again is not confirming
+  assert.equal((await call('GET', `/approvals/${req.id}`)).json.status, 'confirming')
   const waiting = call('GET', `/approvals/${req.id}?wait=5000`)
   await tick()
   await hub.hear('confirm')

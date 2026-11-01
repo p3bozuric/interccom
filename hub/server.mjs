@@ -238,7 +238,8 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
     const a = approvals.get(m.id)
     if (m.action === 'deny') {
       settleApproval(a, 'denied')
-    } else if (m.action === 'approve' && a.destructive && !a.confirming) {
+    } else if (a.destructive && m.action !== 'confirm') {
+      // Only "confirm" lets a destructive request through; "approve" (again) asks for it.
       a.confirming = true
       announce(`Confirm: ${a.name} will ${a.summary}. Say confirm, or deny.`)
     } else {
