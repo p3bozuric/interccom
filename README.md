@@ -230,7 +230,7 @@ Testing on a real Windows PC: [docs/testing-locally.md](docs/testing-locally.md)
 
 The npm package `interccom` (bin `interccom`: `mcp`, `codex-hook`, `codex-setup`, `copilot-setup`, `opencode-setup`) is the hub plus the adapters for agents other than Claude Code. `npm pack --dry-run` shows what it ships.
 
-Design and plans live in `docs/superpowers/`.
+Design and plans live in `docs/superpowers/`. Handoff notes for the current branch: [docs/HANDOFF.md](docs/HANDOFF.md).
 
 ## License
 
