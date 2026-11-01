@@ -2,7 +2,7 @@
 // createListenerManager decides when the listener runs and routes utterances
 // through STT to hub.hear.
 import { spawn as realSpawn } from 'node:child_process'
-import { captureArgv } from './audio/windows.mjs'
+import { captureArgv as platformCapture, FFMPEG_HINT } from './audio/index.mjs'
 
 const FRAME_BYTES = 960 // 480 samples * 2 bytes = 30 ms at 16 kHz mono s16le
 const MAX_IN_FLIGHT = 3
@@ -13,6 +13,7 @@ const NO_MIC = 'No microphone found. Plug one in, or set INTERCCOM_MIC to its na
 
 export function startListener({
   mic, spawn = realSpawn, vad, isMuted, onUtterance, onError, backoffMs = [2000, 30000],
+  captureArgv = platformCapture,
 }) {
   const [minBackoff, maxBackoff] = backoffMs
   let child = null
@@ -69,7 +70,7 @@ export function startListener({
       if (done) return
       done = true
       fail(err?.code === 'ENOENT'
-        ? "Couldn't start ffmpeg for the microphone. Install FFmpeg and make sure ffmpeg is on PATH."
+        ? `Couldn't start ffmpeg for the microphone. ${FFMPEG_HINT}`
         : `Microphone capture failed to start: ${err?.message ?? err}`)
     })
     c.on('close', code => {

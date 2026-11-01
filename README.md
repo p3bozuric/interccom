@@ -8,7 +8,7 @@ Run several sessions at once and they share one voice channel. They take turns, 
 
 Speech can run in the cloud (ElevenLabs) or entirely on your machine (any OpenAI-compatible local speech server, or programs such as Piper and whisper.cpp).
 
-> **Status: early alpha (v0.1).** Windows only for now. See the roadmap below.
+> **Status: early alpha (v0.1).** Tested on Windows. macOS and Linux support is new and still needs testing on real machines. See the roadmap below.
 
 ## How it works
 
@@ -30,7 +30,10 @@ Speech can run in the cloud (ElevenLabs) or entirely on your machine (any OpenAI
 
 - Claude Code (with plugin support)
 - Node.js 18.3 or newer, on PATH
-- `ffmpeg` and `ffplay` on PATH. On Windows: `winget install Gyan.FFmpeg`
+- `ffmpeg` on PATH, plus `ffplay` on Windows and Linux (macOS plays through its built-in `afplay`):
+  - Windows: `winget install Gyan.FFmpeg`
+  - macOS: `brew install ffmpeg`. Allow your terminal to use the microphone when macOS asks.
+  - Linux: `sudo apt install ffmpeg` (or your distribution's package). The mic is read through PulseAudio or PipeWire.
 - Speech engines, either of:
   - an [ElevenLabs](https://elevenlabs.io) API key with **both** permissions: *Text to Speech* and *Speech to Text*, or
   - local engines (see [Local speech](#local-speech)); no key and no cloud
@@ -99,6 +102,10 @@ Only one coordinator runs at a time. `/interccom coordinator take` moves the rol
 
 Set `INTERCCOM_MIC` to a device name to choose a specific microphone; otherwise the first one found is used.
 
+- **Windows:** the device name as listed by `ffmpeg -list_devices true -f dshow -i dummy`.
+- **macOS:** the device name or index as listed by `ffmpeg -f avfoundation -list_devices true -i ""`.
+- **Linux:** a PulseAudio source from `pactl list short sources`, or `alsa:<device>` (e.g. `alsa:hw:1,0`) to read ALSA directly.
+
 ## Local speech
 
 Talking (`tts_engine`) and listening (`stt_engine`) can each run locally:
@@ -123,7 +130,9 @@ After changing engines, close all sessions so the hub restarts with the new sett
 
 - **"missing a permission"**: edit your key in ElevenLabs and enable both Text to Speech and Speech to Text.
 - **"Couldn't reach the local speech server"**: start it, and check the URL setting ends in `/v1`.
-- **"No microphone found"**: plug one in, or set `INTERCCOM_MIC` to its exact name. List devices with `ffmpeg -list_devices true -f dshow -i dummy`.
+- **"No microphone found"**: plug one in, or set `INTERCCOM_MIC` to its exact name (see Settings for how to list devices on your platform).
+- **macOS hears nothing**: System Settings → Privacy & Security → Microphone, and allow the terminal or app that runs Claude Code.
+- **Linux "Microphone capture stopped … No such process"**: no PulseAudio/PipeWire server is running. Start one, or set `INTERCCOM_MIC=alsa:default`.
 - **"ffplay not found"**: install ffmpeg and make sure it's on PATH.
 - **It cut me off mid-sentence**: about 1.6 seconds of silence ends a message. Pause for less than that, or say "Hey Claude" and pause to arm it first.
 
@@ -131,7 +140,7 @@ After changing engines, close all sessions so the hub restarts with the new sett
 
 - **Other coding agents:** Codex, GitHub Copilot CLI and other MCP-capable agents on the same voice channel ([design](docs/superpowers/specs/2026-11-01-interccom-hosts.md)).
 - **Voice approvals:** approve or deny permission prompts by voice, with read-back and confirmation for anything destructive.
-- **Setup:** a `/interccom setup` guide, mic picker, and macOS and Linux support.
+- **Setup:** a `/interccom setup` guide and a mic picker.
 - **Claude Code desktop app and phone:** the PC goes quiet when you're on your phone.
 
 ## Development

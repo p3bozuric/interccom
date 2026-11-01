@@ -1,6 +1,6 @@
 # interccom: other coding agents (Codex, GitHub Copilot CLI, …)
 
-Date: 2026-11-01 · Status: draft for review · Follows: local speech engines (done on this branch)
+Date: 2026-11-01 · Status: approved direction. Codex first, no native dependency. · Follows: local speech engines and macOS/Linux audio (both done on this branch)
 
 ## Intent
 
@@ -38,12 +38,32 @@ A and B are the same for every host, and that gives a useful first version: the 
 ### 2. Hearing (D): from most native to most universal
 
 1. **Host-native injection** wherever a host has hooks that can add context to a turn or start one. This is the Claude Code path. Codex and Copilot CLI both have been adding hook and notification features. The builder **must check each host's current docs**, because they move fast. Each host that has them gets a small adapter in `hosts/<name>/`.
-2. **Terminal wrapper**: `interccom run -- codex` (or `-- copilot`, …). It starts the agent in a pseudo-terminal (ConPTY on Windows), passes your keyboard and screen through untouched, and **types routed transcripts into the agent's input**. That works for any TUI agent, with no cooperation needed.
+2. **Terminal wrapper** (last resort, only for a host with no hooks; not needed for Codex, see 2a): `interccom run -- <agent>`. It starts the agent in a pseudo-terminal (ConPTY on Windows), passes your keyboard and screen through untouched, and **types routed transcripts into the agent's input**. That works for any TUI agent, with no cooperation needed.
    - Idle: type the text and press Enter. That's the same as you typing.
    - Busy: most agents queue or steer with input typed mid-turn. Where a host doesn't, hold the text until idle.
    - Busy/idle (C) comes from the host's notify hook where there is one, otherwise from output going quiet plus the prompt reappearing.
-   - Cost: one native dependency, a PTY library. It's isolated in `hosts/wrapper/` and optional, so the Claude Code plugin stays dependency-free.
+   - Cost: one native dependency, a PTY library. If it's ever built, it ships as a separate optional package, so interccom itself stays dependency-free.
 3. **Pull fallback**: an MCP tool `heard()` the agent calls between steps. It's chatty and depends on the model remembering to call it, so it's a last resort and is never the default.
+
+### 2a. Codex: checked against Codex CLI 0.166.0 (owner's choice: first host)
+
+Codex now has what interccom needs natively, so **Codex needs no terminal wrapper and no native dependency** (owner's decision). These facts come from `codex --help`, `codex features list` and the hook JSON schemas built into the 0.166.0 binary. Recheck them against the Codex docs when building:
+
+- **Hooks** (feature `hooks`, stable, on), with Claude-style command hooks: `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `Stop`, plus compact, interrupt and permission-request events. Hook input carries `session_id`, `turn_id`, `cwd` and `transcript_path`.
+  - `SessionStart` → `hookSpecificOutput.additionalContext`: **the speaking guidance** (need B).
+  - `PostToolUse` → `hookSpecificOutput.additionalContext`: **speech heard mid-turn** reaches the model at its next tool step, like interccom's voice notes today (need D, busy).
+  - `Stop` → `decision: "block"` + `reason`: **speech still waiting at turn end** keeps the turn going with it (need D, turn end). `stop_hook_active` guards against loops.
+  - `UserPromptSubmit` / `Stop`: **busy/idle** (need C), and "the person typed here" for routing.
+- **`codex queue --thread <session_id> --message <text> --resume`**: **speech heard while Codex is idle** becomes its next message (need D, idle). It goes through Codex's own app-server daemon.
+- **Plugins and marketplaces** (`codex plugin marketplace add`, `codex plugin add`), with a `hooks/hooks.json` inside the plugin. interccom can ship a Codex plugin from this same repo, much like the Claude Code one.
+- **MCP servers** (`codex mcp`, `[mcp_servers.*]` in `config.toml`): the `speak` and `board` tools (need A).
+- **Codex has its own voice** (`in_app_voice`, stable, with a `codex-voice-host` binary). Two programs must not own the mic: the interccom Codex setup tells you to keep Codex's own voice off while interccom is in use.
+
+**Shape of the Codex adapter** (`hosts/codex/`):
+- The **MCP server process lives as long as the Codex session**, so it is that session's link, the way `connect.mjs` is for Claude Code. It registers with the hub (`host: 'codex'`), keeps the event stream open, and holds heard text and reports in a small inbox.
+- **Hooks are short-lived Node scripts.** They read the hook JSON on stdin and ask the hub for that session's inbox, keyed by Codex `session_id`. The MCP server learns the id from the first hook (SessionStart) through the hub. They answer with `additionalContext` or a Stop block.
+- **Idle delivery** runs `codex queue … --resume` from the hub side with the session's id, with no shell, and the session's cwd as `-C`.
+- **Coordinator relays to a Codex worker** use the same inbox. That is the `/sessions/:id/say` endpoint in section 3.
 
 ### 3. The coordinator stays a Claude Code session in v1
 
@@ -55,21 +75,24 @@ Coordinator → worker messages use Claude Code's `SendMessage`, so permission b
 
 ### 4. Platforms
 
-Codex and Copilot CLI users are often on macOS and Linux, so this work needs the audio-module split the original spec already planned: `hub/audio/{windows,macos,linux}.mjs` (dshow, avfoundation, pulse/alsa capture; ffplay or afplay playback). It is required before this is useful outside Windows.
+Done: `hub/audio/{windows,macos,linux}.mjs`, selected by `hub/audio/index.mjs`. Capture is dshow, avfoundation, or pulse (alsa with `INTERCCOM_MIC=alsa:…`). Playback is ffplay, afplay or ffplay. It still needs testing on real macOS and Linux machines.
 
 ## Order of work
 
 1. ✅ **Local speech engines**: `local` (OpenAI-compatible servers) and `command` (Piper, whisper-cli). Done on this branch.
-2. **Audio on macOS and Linux.** Small, and unblocks most Codex and Copilot users.
-3. **`interccom mcp` + npm `bin` + AGENTS.md snippet**: every MCP host can speak, and is on the board and the coordinator's reports.
-4. **`interccom run --` wrapper**: every TUI host can hear.
-5. **Native adapters** for hosts whose hooks allow it (Codex first, then Copilot CLI), replacing the wrapper where they're better.
-6. **`/sessions/:id/say`** for coordinator relays to non-Claude workers.
+2. ✅ **Audio on macOS and Linux.** Done on this branch; still to be tested on real machines.
+3. **`interccom mcp`**: the stdio MCP server with `speak` and `board`, acting as the session link. Any MCP host can speak, and it shows up on the board and in the coordinator's reports.
+4. **Codex adapter** (section 2a): Codex plugin, hooks for guidance, mid-turn, turn-end and busy/idle, idle delivery through `codex queue`, and a Codex section in the testing guide.
+5. **`/sessions/:id/say`** for coordinator relays to non-Claude workers.
+6. **Copilot CLI, Gemini CLI**: the same pattern where their hooks allow it; the wrapper only for a host without hooks.
 7. Later: local wake-word and VAD models (the transcribe-then-match approach sends room audio to the STT engine; with a local STT engine that's already on-device).
+
+## Decisions
+
+- First host after Claude Code: **Codex** (owner).
+- Native dependency: **none**. Codex integrates through hooks + MCP + `codex queue`; the wrapper is deferred, and would be a separate optional package (builder's recommendation, accepted).
 
 ## Open questions for the owner
 
 - Does "GitHub CLI" mean Copilot CLI (assumed above)?
-- Which host first after Claude Code: Codex (assumed)?
-- Is one optional native dependency (a PTY library) acceptable for the wrapper, given the plugin itself stays dependency-free?
 - Should the npm package be `interccom`, if the name is free?

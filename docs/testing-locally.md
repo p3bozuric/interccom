@@ -181,6 +181,18 @@ Quote paths that contain spaces. Backslashes are fine. No shell is used, so `|`,
 | 7.7 | Point `tts_command` at a missing exe | One toast: "Couldn't run … Install it, or put its full path in the tts_command setting." |
 | 7.8 | Remove `{in}` from `stt_command` | A toast saying it must contain `{in}`. |
 
+## 7c. macOS and Linux (if you have one)
+
+This support is new. Unit tests cover the device parsing and the commands, and in the cloud container ffplay playback worked and Linux capture failed with a clear message (it has no audio server). It hasn't run with a real mic yet.
+
+| # | Platform | Do | Expect |
+|---|---|---|---|
+| 7.9 | macOS | `ffmpeg -f avfoundation -list_devices true -i ""`, then start a session | The first audio device is used. macOS asks for mic permission for the terminal or app; after allowing it, `mic: listening`. |
+| 7.10 | macOS | Rerun 2.2–2.5 | Plays through `afplay`. `/interccom stop` cuts it off. |
+| 7.11 | Linux | `pactl list short sources`, then start a session | The first non-monitor source is used, or `default` without pactl. `mic: listening`. |
+| 7.12 | Linux | `INTERCCOM_MIC=alsa:default` | Captures through ALSA instead. |
+| 7.13 | Linux | Rerun 2.2–2.5 | Plays through `ffplay`. |
+
 ## 8. Things that couldn't be verified in the cloud: check them
 
 These are assumptions about Claude Code's plugin API that only a real session can confirm.
