@@ -20,4 +20,4 @@ npm run render   # takes a few minutes
 
 To re-voice a line, delete its file in `audio/` and run `npm run voices` with `ELEVENLABS_API_KEY` set. The key needs the Text to Speech permission. Only missing lines are generated.
 
-The MP4 is not committed. To use it in the README, upload it by dragging it into the editor on github.com.
+The rendered video is [interccom-demo.mp4](interccom-demo.mp4). A README can't play an MP4 from the repo, so to embed it, upload the same file by dragging it into the editor on github.com.
