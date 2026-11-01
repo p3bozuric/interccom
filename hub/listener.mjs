@@ -2,7 +2,7 @@
 // createListenerManager decides when the listener runs and routes utterances
 // through STT to hub.hear.
 import { spawn as realSpawn } from 'node:child_process'
-import { captureArgv } from './audio/windows.mjs'
+import { captureArgv as platformCapture, FFMPEG_HINT } from './audio/index.mjs'
 
 const FRAME_BYTES = 960 // 480 samples * 2 bytes = 30 ms at 16 kHz mono s16le
 const MAX_IN_FLIGHT = 3
@@ -13,6 +13,7 @@ const NO_MIC = 'No microphone found. Plug one in, or set INTERCCOM_MIC to its na
 
 export function startListener({
   mic, spawn = realSpawn, vad, isMuted, onUtterance, onError, backoffMs = [2000, 30000],
+  captureArgv = platformCapture,
 }) {
   const [minBackoff, maxBackoff] = backoffMs
   let child = null
@@ -69,7 +70,7 @@ export function startListener({
       if (done) return
       done = true
       fail(err?.code === 'ENOENT'
-        ? "Couldn't start ffmpeg for the microphone. Install FFmpeg and make sure ffmpeg is on PATH."
+        ? `Couldn't start ffmpeg for the microphone. ${FFMPEG_HINT}`
         : `Microphone capture failed to start: ${err?.message ?? err}`)
     })
     c.on('close', code => {
@@ -93,10 +94,11 @@ export function startListener({
 }
 
 // Owns the listener's lifecycle. It runs only when listenMode is not 'off',
-// an API key is configured and a mic is found. Call start() once to subscribe
+// the speech-to-text engine is usable (e.g. an API key is set) and a mic is found. Call start() once to subscribe
 // to config changes; sync() re-evaluates immediately.
 export function createListenerManager({
   hub, env = process.env, listMics, startListener: start = startListener, stt, pcmToWav, createVad,
+  sttReady = cfg => Boolean(cfg.apiKey),
 }) {
   let running = null // { stop }
   let closed = false
@@ -107,7 +109,7 @@ export function createListenerManager({
 
   async function transcribe(pcm) {
     const cfg = hub.getConfig()
-    const text = await stt(pcmToWav(pcm, 16000), { apiKey: cfg.apiKey, model: cfg.sttModel, language: cfg.sttLanguage })
+    const text = await stt(pcmToWav(pcm, 16000), cfg)
     return String(text ?? '').trim()
   }
 
@@ -139,7 +141,7 @@ export function createListenerManager({
   function sync() {
     if (closed) return
     const cfg = hub.getConfig()
-    const want = cfg.listenMode !== 'off' && Boolean(cfg.apiKey)
+    const want = cfg.listenMode !== 'off' && sttReady(cfg)
     if (!want) {
       if (running) {
         halt()
@@ -162,7 +164,7 @@ export function createListenerManager({
       onUtterance,
       onError: msg => hub.reportError(msg),
     })
-    hub.broadcast({ type: 'mic', state: 'listening' })
+    hub.broadcast({ type: 'mic', state: 'listening', name: mic })
   }
 
   return {

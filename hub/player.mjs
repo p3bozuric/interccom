@@ -12,8 +12,10 @@ export function createPlayer({ queue, engines, audio, getConfig, onError, boardS
     const ac = new AbortController()
     current = ac
     try {
-      const name = board?.get(item.sessionId)?.name ?? item.name
-      const text = boardSize() > 1 && name ? `${name}: ${item.text}` : item.text
+      const row = board?.get(item.sessionId)
+      const name = row?.name ?? item.name
+      // The coordinator speaks for everyone, so it never announces itself.
+      const text = boardSize() > 1 && name && row?.role !== 'coordinator' ? `${name}: ${item.text}` : item.text
       const mp3 = await engines.tts(text, cfg)
       if (ac.signal.aborted) return
       await audio.play(mp3, ac.signal)

@@ -225,7 +225,7 @@ test('manager starts on the first mic when mode is on and a key exists', () => {
   m.sync()
   assert.equal(started.length, 1)
   assert.equal(started[0].mic, 'Mic A')
-  assert.deepEqual(hub.broadcasts, [{ type: 'mic', state: 'listening' }])
+  assert.deepEqual(hub.broadcasts, [{ type: 'mic', state: 'listening', name: 'Mic A' }])
   m.sync()
   assert.equal(started.length, 1)
 })
@@ -284,7 +284,7 @@ test('utterance goes through STT with hub config, then hub.hear', async () => {
   await flush()
   assert.equal(sttCalls.length, 1)
   assert.equal(sttCalls[0].wav.toString(), 'WAVpcm')
-  assert.deepEqual(sttCalls[0].c, { apiKey: 'k', model: 'scribe_v1', language: 'en' })
+  assert.deepEqual(sttCalls[0].c, hub.getConfig())
   assert.deepEqual(hub.heard, ['hello there'])
 })
 

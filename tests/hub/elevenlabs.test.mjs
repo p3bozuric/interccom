@@ -84,7 +84,12 @@ function hanging() {
   const calls = [];
   const f = (url, init) => {
     calls.push({ url, init });
-    return new Promise((_, reject) => init.signal.addEventListener('abort', () => reject(init.signal.reason), { once: true }));
+    // AbortSignal.timeout's timer is unref'd: hold the event loop open until it fires.
+    const keepAlive = setTimeout(() => {}, 10_000);
+    return new Promise((_, reject) => init.signal.addEventListener('abort', () => {
+      clearTimeout(keepAlive);
+      reject(init.signal.reason);
+    }, { once: true }));
   };
   f.calls = calls;
   return f;

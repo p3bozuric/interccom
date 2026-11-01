@@ -59,6 +59,11 @@ test('relaunches after the hub is killed', async () => {
   const first = readHub(stateDir).pid
   pids.add(first)
   process.kill(first)
+  // SIGTERM is asynchronous: until the old hub has exited it may still (rightly) answer the probe.
+  for (let i = 0; i < 200; i++) {
+    try { process.kill(first, 0) } catch { break }
+    await new Promise(r => setTimeout(r, 10))
+  }
   const h = await ensureHub({ stateDir, hubEntry })
   const second = readHub(stateDir).pid
   pids.add(second)
@@ -174,4 +179,17 @@ test('hubEnv copies the environment without the API keys', () => {
   assert.deepEqual(hubEnv(src), { PATH: '/bin', INTERCCOM_TEST_LOG: 'l' })
   assert.deepEqual(hubEnv({ Elevenlabs_Api_Key: 'c', Path: 'p' }), { Path: 'p' })
   assert.equal(src.ELEVENLABS_API_KEY, 'b')
+})
+
+import { resolveNode } from '../../hub/launch.mjs'
+
+test('resolveNode: real node as is; inside Bun or a packaged CLI, node from PATH; override; clear error', () => {
+  assert.equal(resolveNode({ env: {}, execPath: '/usr/bin/node', versions: {} }), '/usr/bin/node')
+  assert.equal(resolveNode({ env: {}, execPath: 'C:\\Program Files\\nodejs\\node.exe', versions: {}, platform: 'win32' }), 'C:\\Program Files\\nodejs\\node.exe')
+  const exists = f => f === '/opt/n/bin/node' || f === 'C:\\n\\node.exe'
+  assert.equal(resolveNode({ env: { PATH: '/x:/opt/n/bin' }, execPath: '/usr/local/bin/opencode', versions: { bun: '1.2' }, exists }), '/opt/n/bin/node')
+  assert.equal(resolveNode({ env: { PATH: '/opt/n/bin' }, execPath: '/usr/bin/node', versions: { bun: '1.2' }, exists }), '/opt/n/bin/node')
+  assert.equal(resolveNode({ env: { Path: 'C:\\x;C:\\n' }, execPath: 'C:\\copilot\\copilot.exe', versions: {}, platform: 'win32', exists }), 'C:\\n\\node.exe')
+  assert.equal(resolveNode({ env: { INTERCCOM_NODE: '/my/node' }, execPath: '/opencode', versions: { bun: '1' } }), '/my/node')
+  assert.throws(() => resolveNode({ env: { PATH: '/x' }, execPath: '/opencode', versions: {}, exists: () => false }), /INTERCCOM_NODE/)
 })

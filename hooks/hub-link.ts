@@ -1,5 +1,5 @@
 import type { EngineInterface } from 'claude-code'
-import { createDelivery, makeTag } from './delivery.ts'
+import { createDelivery, heardText, makeTag } from './delivery.ts'
 import { baseName, linkEnv } from './link-env.ts'
 import { BACKOFF_START_MS, restartBackoff } from './backoff.ts'
 
@@ -11,6 +11,7 @@ import { BACKOFF_START_MS, restartBackoff } from './backoff.ts'
 // mid-turn it waits for register.ts to hand it to the model as a tagged voice note.
 
 export type Link = { port: number; token: string; sessionId: string; name: string }
+export type Role = 'worker' | 'coordinator'
 
 const ERROR_DEDUPE_MS = 60_000
 
@@ -22,11 +23,62 @@ let restartWait = BACKOFF_START_MS
 let linkedAt = 0 // when the current link's first line arrived; 0 before that
 let lastError = ''
 let lastErrorAt = 0
+let role: Role = 'worker'
+// Survives link restarts (a new hub, a reconnect): the session claims the role again.
+let wantCoordinator = false
+let setupChecked = false // the first-run check runs once per session
 export const voiceTag = makeTag()
 export const delivery = createDelivery(voiceTag)
 
 export function currentLink(): Link | undefined {
   return link
+}
+
+export function currentRole(): Role {
+  return role
+}
+
+// Ask the hub for a role. Throws the hub's refusal (another coordinator) so the command can show it.
+export async function requestRole($: EngineInterface, wanted: Role, takeover: boolean): Promise<Role> {
+  const id = link?.sessionId
+  if (!id) throw new Error('interccom is not connected to the hub yet; try again in a moment.')
+  await hubCall($, 'POST', `/sessions/${encodeURIComponent(id)}/role`, { role: wanted, takeover })
+  role = wanted
+  wantCoordinator = wanted === 'coordinator'
+  return role
+}
+
+async function reclaimRole($: EngineInterface): Promise<void> {
+  try {
+    await requestRole($, 'coordinator', false)
+  } catch (err) {
+    role = 'worker'
+    wantCoordinator = false
+    toastError($, `no longer the coordinator (${String((err as Error)?.message ?? err).slice(0, 120)})`)
+  }
+}
+
+// Once per session: if speech can't work yet, say what's missing and where to fix it.
+async function firstRunCheck($: EngineInterface): Promise<void> {
+  try {
+    const report = (await hubCall($, 'GET', '/setup')) as { ok?: unknown; problems?: unknown[] }
+    if (report.ok === false && report.problems?.length) {
+      toastError($, `not set up yet: ${String(report.problems[0]).slice(0, 110)} Run /interccom setup.`)
+    }
+  } catch { /* an old hub without /setup: nothing to say */ }
+}
+
+// Submit as an automated (non-person) message; fall back if this Claude Code rejects asUser: false.
+async function submitReport($: EngineInterface, text: string): Promise<void> {
+  try {
+    await $.prompt.submit({ text, asUser: false })
+  } catch {
+    await $.prompt.submit({ text, asUser: true })
+  }
+}
+
+export async function deliverReports($: EngineInterface, text: string | undefined): Promise<void> {
+  if (text) await submitReport($, text)
 }
 
 export function setLinkName(name: string): void {
@@ -65,13 +117,24 @@ async function handleLine($: EngineInterface, line: string): Promise<void> {
       name: String(msg.name ?? ''),
     }
     linkedAt = Date.now()
-    // A new registration starts idle on the hub: bring it up to date.
+    // A new registration starts idle, as a worker, on the hub: bring it up to date.
     reportBusy($, delivery.isBusy())
+    role = 'worker'
+    if (wantCoordinator) await reclaimRole($)
+    if (!setupChecked) { setupChecked = true; void firstRunCheck($) }
   } else if (msg.type === 'hello') {
     if (link && typeof msg.name === 'string') link = { ...link, name: msg.name }
   } else if (msg.type === 'heard') {
     const text = String(msg.text ?? '').trim()
-    if (text) await deliverHeard($, text)
+    const addressed = typeof msg.addressed === 'string' ? msg.addressed : undefined
+    if (text) await deliverHeard($, heardText(text, addressed))
+  } else if (msg.type === 'report') {
+    const r = { from: String(msg.from ?? ''), priority: String(msg.priority ?? 'status'), text: String(msg.text ?? '').trim() }
+    if (r.text && delivery.report(r) === 'submit') await submitReport($, delivery.formatOne(r))
+  } else if (msg.type === 'role') {
+    role = msg.role === 'coordinator' ? 'coordinator' : 'worker'
+    wantCoordinator = role === 'coordinator'
+    $.ui.toast(`interccom: this session is now a ${role}${msg.reason ? ` (${String(msg.reason).slice(0, 100)})` : ''}.`)
   } else if (msg.type === 'mic') {
     $.ui.status(`mic: ${String(msg.state ?? '')}`)
   } else if (msg.type === 'error') {

@@ -1,12 +1,18 @@
 import type { Register, EngineInterface } from 'claude-code'
-import { guidance } from './guidance.ts'
-import { startLink, hubCall, currentLink, setLinkName, reportBusy, delivery, voiceTag } from './hub-link.ts'
+import { guidance, coordinatorGuidance, normalizeAutonomy } from './guidance.ts'
+import {
+  startLink, hubCall, currentLink, setLinkName, reportBusy, delivery, voiceTag,
+  currentRole, requestRole, deliverReports,
+} from './hub-link.ts'
+import { boardText, type BoardData } from './board-view.ts'
 import { baseName, isMuted } from './link-env.ts'
 
 // interccom, the session side. Claude gets a `speak` tool whose text goes to the hub,
 // which plays one voice for every session in priority order. What the person says
 // comes back from the hub: idle, it is sent as their message; mid-turn it rides
 // along with the next tool result, or is sent when the turn ends.
+// One session can be the coordinator (/interccom coordinator): it hears everything,
+// gets the other sessions' spoken lines as reports, and is the only one heard.
 
 type Priority = 'question' | 'heads-up' | 'status'
 const PRIORITIES: readonly Priority[] = ['question', 'heads-up', 'status']
@@ -36,7 +42,7 @@ async function listenCommand($: EngineInterface, args: string): Promise<{ text: 
 }
 
 async function interccomCommand($: EngineInterface, args: string): Promise<{ text: string }> {
-  const usage = { text: 'Usage: /interccom name <name> | /interccom status | /interccom stop' }
+  const usage = { text: 'Usage: /interccom setup [test] | name <name> | status | stop | coordinator [take] | worker' }
   const trimmed = args.trim()
   const [sub = '', ...rest] = trimmed.split(/\s+/)
   if (sub.toLowerCase() === 'name') {
@@ -49,21 +55,62 @@ async function interccomCommand($: EngineInterface, args: string): Promise<{ tex
     setLinkName(name)
     return { text: `This session is now called ${name}.` }
   }
+  if (sub.toLowerCase() === 'setup') {
+    if ((rest[0] ?? '').toLowerCase() === 'test') {
+      const id = currentLink()?.sessionId
+      if (!id) return { text: 'interccom is not connected to the hub yet; try again in a moment.' }
+      await hubCall($, 'POST', '/setup/test', { sessionId: id })
+      return { text: 'Playing a test line. Then say "Hey Claude, testing" to check listening.' }
+    }
+    const report = (await hubCall($, 'GET', '/setup')) as { text?: unknown }
+    return { text: String(report.text ?? '') }
+  }
   if (sub.toLowerCase() === 'status') {
-    const board = (await hubCall($, 'GET', '/board')) as {
-      sessions?: { name?: unknown; busy?: unknown; lastLine?: unknown }[]
-    }
-    const rows = board.sessions ?? []
-    if (!rows.length) return { text: 'No sessions are connected.' }
+    const board = (await hubCall($, 'GET', '/board')) as BoardData
+    return { text: boardText(board, Date.now()) }
+  }
+  if (sub.toLowerCase() === 'coordinator') {
+    const takeover = (rest[0] ?? '').toLowerCase() === 'take'
+    await requestRole($, 'coordinator', takeover)
     return {
-      text: rows.map((r) => `${String(r.name)} — ${r.busy ? 'busy' : 'idle'} — ${String(r.lastLine ?? '')}`).join('\n'),
+      text: 'This session is now the interccom coordinator: it hears everything you say, and the other sessions report to it. '
+        + 'Its instructions apply from your next message. /interccom worker steps down.',
     }
+  }
+  if (sub.toLowerCase() === 'worker') {
+    await requestRole($, 'worker', false)
+    return { text: 'This session is a worker again.' }
   }
   if (sub.toLowerCase() === 'stop') {
     const out = (await hubCall($, 'POST', '/stop', {})) as { flushed?: unknown }
     return { text: `Stopped. Cleared ${Number(out.flushed ?? 0)} queued updates.` }
   }
   return usage
+}
+
+type BoardInput = { resolve?: unknown; decision?: unknown; relay?: { to?: unknown; quote?: unknown } }
+
+async function boardTool($: EngineInterface, input: BoardInput): Promise<{ result: string }> {
+  const id = currentLink()?.sessionId
+  if (!id) return { result: 'interccom is not connected to the hub yet.' }
+  const notes: string[] = []
+  const resolve = String(input.resolve ?? '').trim()
+  const decision = String(input.decision ?? '').trim()
+  if (resolve) {
+    const out = (await hubCall($, 'POST', '/board/resolve', { sessionId: id, name: resolve })) as { resolved?: unknown }
+    notes.push(`Marked ${String(out.resolved)}'s question as handled.`)
+  }
+  if (decision) {
+    await hubCall($, 'POST', '/board/decision', { sessionId: id, text: decision })
+    notes.push('Decision logged.')
+  }
+  const to = String(input.relay?.to ?? '').trim()
+  if (to) {
+    const out = (await hubCall($, 'POST', '/board/relay', { sessionId: id, to, quote: String(input.relay?.quote ?? '') })) as { relayed?: unknown }
+    notes.push(`Passed the person's words to ${String(out.relayed)}.`)
+  }
+  const board = (await hubCall($, 'GET', '/board')) as BoardData
+  return { result: [...notes, boardText(board, Date.now())].join('\n') }
 }
 
 export const register: Register = (on, opts) => {
@@ -90,6 +137,25 @@ export const register: Register = (on, opts) => {
       },
       isDeferred: false,
     })
+    await $.tool.register({
+      name: 'board',
+      description:
+        'interccom status board: every connected Claude Code session with its name, folder, busy/idle, last spoken line and open question, plus decisions logged by the coordinator. The coordinator can also mark a question answered (resolve) or log a decision it made on its own (decision).',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          resolve: { type: 'string', description: 'Coordinator only: the session name whose open question is now handled.' },
+          decision: { type: 'string', description: 'Coordinator only: one plain sentence describing a decision you made without the person.' },
+          relay: {
+            type: 'object',
+            description: "Coordinator only: pass the person's own recent words, quoted exactly, to a session SendMessage can't reach (Codex and other non-Claude agents).",
+            properties: { to: { type: 'string', description: 'Session name.' }, quote: { type: 'string', description: 'The exact words the person said.' } },
+            required: ['to', 'quote'],
+          },
+        },
+      },
+      isDeferred: false,
+    })
     await $.command.register({
       name: 'listen',
       description: 'Voice input: show or set the listening mode (always, wake, off).',
@@ -98,8 +164,8 @@ export const register: Register = (on, opts) => {
     })
     await $.command.register({
       name: 'interccom',
-      description: 'interccom: rename this session, list every connected session, or stop playback.',
-      argumentHint: 'name <name> | status | stop',
+      description: 'interccom: check the speech setup, rename this session, list every session, stop playback, or make this session the coordinator.',
+      argumentHint: 'setup [test] | name <name> | status | stop | coordinator [take] | worker',
       immediate: true,
     })
     startLink($, options, e.cwd)
@@ -108,9 +174,12 @@ export const register: Register = (on, opts) => {
 
   on('prompt.compose', async ($, e, next) => {
     const composed = await next(e)
-    return {
-      sections: [...composed.sections, { id: 'interccom:guidance', text: guidance(currentName(), voiceTag), scope: 'session' as const }],
+    const sections = [...composed.sections, { id: 'interccom:guidance', text: guidance(currentName(), voiceTag), scope: 'session' as const }]
+    if (currentRole() === 'coordinator') {
+      const policy = coordinatorGuidance(voiceTag, normalizeAutonomy(options.autonomy), String(options.autonomy_rules ?? ''))
+      sections.push({ id: 'interccom:coordinator', text: policy, scope: 'session' as const })
     }
+    return { sections }
   })
 
   // Track whether the main loop is mid-turn; send anything heard after the last tool call.
@@ -128,6 +197,7 @@ export const register: Register = (on, opts) => {
       reportBusy($, false)
       const text = delivery.takeAtTurnEnd()
       if (text) await $.prompt.submit({ text, asUser: true })
+      await deliverReports($, delivery.takeReportsAtTurnEnd())
     }
     return done
   })
@@ -152,6 +222,9 @@ export const register: Register = (on, opts) => {
     const out = (await hubCall($, 'POST', '/speak', { sessionId: id, text, priority })) as { queued?: unknown }
     return { result: out.queued ? 'Speaking.' : 'Nothing to say.' }
   }).catch(($, e, next) => ({ result: `interccom could not speak: ${errorText(next.error)}` }))
+
+  on('tool.call', { tool: 'mcp__interccom__board' }, async ($, e) => boardTool($, e as BoardInput))
+    .catch(($, e, next) => ({ result: `interccom board unavailable: ${errorText(next.error)}` }))
 
   // The person typed here: this is the session they're working with.
   on('prompt.submit', async ($, e, next) => {

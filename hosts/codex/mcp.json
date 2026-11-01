@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "interccom": {
+      "command": "node",
+      "args": ["${PLUGIN_ROOT}/hub/cli.mjs", "mcp", "--host", "codex"]
+    }
+  }
+}

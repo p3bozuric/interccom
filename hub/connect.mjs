@@ -6,7 +6,7 @@ import path from 'node:path'
 import { parseArgs } from 'node:util'
 import { fileURLToPath } from 'node:url'
 import { ensureHub } from './launch.mjs'
-import { resolveApiKey } from './keys.mjs'
+import { configFromEnv } from './config-env.mjs'
 
 const out = o => process.stdout.write(JSON.stringify(o) + '\n')
 
@@ -26,16 +26,7 @@ async function main() {
     return res.json()
   }
 
-  const apiKey = env.INTERCCOM_NO_KEY_FALLBACK
-    ? env.INTERCCOM_API_KEY || ''
-    : resolveApiKey({ configKey: env.INTERCCOM_API_KEY, env, platform: process.platform })
-  const config = {}
-  if (apiKey) config.apiKey = apiKey
-  if (env.INTERCCOM_VOICE_ID) config.voiceId = env.INTERCCOM_VOICE_ID
-  if (env.INTERCCOM_TTS_MODEL) config.ttsModel = env.INTERCCOM_TTS_MODEL
-  if (env.INTERCCOM_STT_LANGUAGE) config.sttLanguage = env.INTERCCOM_STT_LANGUAGE
-  if (env.INTERCCOM_LISTEN_MODE) config.listenMode = env.INTERCCOM_LISTEN_MODE
-  if (env.INTERCCOM_MUTED === 'true' || env.INTERCCOM_MUTED === 'false') config.muted = env.INTERCCOM_MUTED === 'true'
+  const config = configFromEnv(env)
   await post('/config', config)
 
   const { sessionId, name } = await post('/sessions', {
