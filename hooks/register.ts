@@ -41,19 +41,26 @@ async function listenCommand($: EngineInterface, args: string): Promise<{ text: 
   return { text: `Listening mode: ${String(out.mode)}.` }
 }
 
+// The hub turns the wanted name into a speakable, unique one ("Session #3" -> session-3).
+async function renameSession($: EngineInterface, wanted: string): Promise<string> {
+  setLinkName(wanted) // a link that isn't up yet registers under it
+  const id = currentLink()?.sessionId
+  if (!id) return wanted
+  const out = (await hubCall($, 'POST', `/sessions/${encodeURIComponent(id)}/name`, { name: wanted })) as { name?: unknown }
+  const name = String(out.name ?? wanted)
+  setLinkName(name)
+  return name
+}
+
 async function interccomCommand($: EngineInterface, args: string): Promise<{ text: string }> {
   const usage = { text: 'Usage: /interccom setup [test] | name <name> | status | stop | coordinator [take] | worker' }
   const trimmed = args.trim()
   const [sub = '', ...rest] = trimmed.split(/\s+/)
   if (sub.toLowerCase() === 'name') {
     const wanted = rest.join(' ').trim()
-    const id = currentLink()?.sessionId
     if (!wanted) return usage
-    if (!id) return { text: 'interccom is not connected to the hub yet; try again in a moment.' }
-    const out = (await hubCall($, 'POST', `/sessions/${encodeURIComponent(id)}/name`, { name: wanted })) as { name?: unknown }
-    const name = String(out.name ?? wanted)
-    setLinkName(name)
-    return { text: `This session is now called ${name}.` }
+    if (!currentLink()) return { text: 'interccom is not connected to the hub yet; try again in a moment.' }
+    return { text: `This session is now called ${await renameSession($, wanted)}.` }
   }
   if (sub.toLowerCase() === 'setup') {
     if ((rest[0] ?? '').toLowerCase() === 'test') {
@@ -240,4 +247,18 @@ export const register: Register = (on, opts) => {
 
   on('command.run', { command: 'interccom' }, async ($, e) => interccomCommand($, e.args))
     .catch(($, e, next) => ({ text: `interccom: ${errorText(next.error)}` }))
+
+  // Claude Code's own /rename names this session for interccom too. The rename itself always runs.
+  on('command.run', { command: 'rename' }, async ($, e, next) => {
+    const ran = await next(e)
+    const wanted = e.args.trim().replace(/^["']|["']$/g, '')
+    if (wanted) {
+      try {
+        await renameSession($, wanted)
+      } catch (err) {
+        $.ui.toast(`interccom: couldn't use the new name (${errorText(err).slice(0, 120)})`)
+      }
+    }
+    return ran
+  })
 }

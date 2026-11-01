@@ -66,7 +66,7 @@ async function start(opts = {}) {
       headers: { 'x-interccom-token': TOKEN },
       signal: ac.signal,
     })
-    // raw: every line. lines: without keepalive and mic-state lines, so tests can count events.
+    // raw: every line. lines: without keepalive, mic-state and cue lines, so tests can count events.
     const s = { raw: [], lines: [], waiters: [], abort: () => ac.abort() }
     streams.push(s)
     const reader = res.body.getReader()
@@ -85,7 +85,7 @@ async function start(opts = {}) {
             if (line.trim()) {
               const msg = JSON.parse(line)
               s.raw.push(msg)
-              if (msg.type !== 'ping' && msg.type !== 'mic') s.lines.push(msg)
+              if (msg.type !== 'ping' && msg.type !== 'mic' && msg.type !== 'cue') s.lines.push(msg)
             }
             s.waiters.splice(0).forEach(w => w())
           }
@@ -286,6 +286,40 @@ test('bare wake word arms the next utterance', async () => {
   await hub.hear('not for you')
   await tick()
   assert.equal(s.lines.length, 2)
+})
+
+const cues = s => s.raw.filter(m => m.type === 'cue')
+
+test('being heard is cued: armed and sent each chime and tell every session; unheard speech does neither', async () => {
+  const audio = fakeAudio()
+  audio.chimes = []
+  audio.chime = name => audio.chimes.push(name)
+  const { hub, register, open } = await start({ audio })
+  const a = await register('session 3')
+  const s = await open(a.sessionId)
+  const other = await open((await register('web')).sessionId)
+  await hub.hear('just people talking')
+  await hub.hear('hey claude')
+  await hub.hear('session three, do the thing')
+  await waitFor(() => cues(other).length >= 2)
+  assert.deepEqual(audio.chimes, ['armed', 'sent'])
+  assert.deepEqual(cues(s), [{ type: 'cue', state: 'armed' }, { type: 'cue', state: 'sent', to: 'session-3' }])
+  assert.deepEqual(cues(other), cues(s))
+  assert.deepEqual(audio.played, [], 'chimes never go through the talk queue')
+})
+
+test('while speech plays, sessions are told the mic is deaf; afterwards it is idle again', async () => {
+  const g = gate()
+  const audio = fakeAudio(g)
+  const { call, register, open } = await start({ audio })
+  const { sessionId } = await register('api')
+  const s = await open(sessionId)
+  await call('POST', '/speak', { sessionId, text: 'hello', priority: 'status' })
+  await waitFor(() => cues(s).length === 1)
+  assert.deepEqual(cues(s), [{ type: 'cue', state: 'talking' }])
+  g.open()
+  await waitFor(() => cues(s).length === 2)
+  assert.deepEqual(cues(s)[1], { type: 'cue', state: 'idle' })
 })
 
 test('stop flushes non-questions and aborts playback', async () => {

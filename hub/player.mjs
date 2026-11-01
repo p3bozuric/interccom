@@ -1,6 +1,6 @@
 // Takes one item at a time off the talk queue: TTS, then playback.
 // Never runs two plays at once. stop() aborts the current item.
-export function createPlayer({ queue, engines, audio, getConfig, onError, boardSize, now, board, startPaused = false }) {
+export function createPlayer({ queue, engines, audio, getConfig, onError, boardSize, now, board, startPaused = false, onPlaying = () => {} }) {
   let paused = startPaused
   let running = false
   let current = null // AbortController of the item in flight
@@ -18,7 +18,13 @@ export function createPlayer({ queue, engines, audio, getConfig, onError, boardS
       const text = boardSize() > 1 && name && row?.role !== 'coordinator' ? `${name}: ${item.text}` : item.text
       const mp3 = await engines.tts(text, cfg)
       if (ac.signal.aborted) return
-      await audio.play(mp3, ac.signal)
+      // The mic is deaf while audio plays: tell the person, from the first sound to the last.
+      onPlaying(true)
+      try {
+        await audio.play(mp3, ac.signal)
+      } finally {
+        onPlaying(false)
+      }
       if (ac.signal.aborted) return
       board?.setLastLine(item.sessionId, item.text, now())
     } catch (err) {

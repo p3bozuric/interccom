@@ -26,6 +26,7 @@ const MAX_INBOX = 20
 const RECENT_MS = 15 * 60_000 // how long the coordinator may relay something the person said
 const MAX_RECENT = 50
 const HOST_EVENTS = new Set(['session-start', 'prompt', 'tool', 'stop'])
+const SENT_CUE_MS = 3000 // how long "sent to <name>" stays up
 
 // Words only, lower case: "Use port 8080!" and "use port 8080" are the same quote.
 export function normWords(s) {
@@ -100,6 +101,7 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
   let micName = ''
   let lastMicError = ''
   let idleTimer = null
+  let cueTimer = null
   const tokenBuf = Buffer.from(String(token))
 
   const player = createPlayer({
@@ -107,6 +109,7 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
     getConfig: () => ({ ...config }),
     onError: err => reportError(err),
     boardSize: () => board.size,
+    onPlaying: playing => cue(playing ? 'talking' : 'idle'),
   })
 
   function send(res, obj) {
@@ -116,6 +119,23 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
   function broadcast(obj) {
     if (obj?.type === 'mic') { micState = obj.state; micName = obj.name ?? micName; if (obj.state === 'listening') lastMicError = '' }
     for (const res of streams.values()) send(res, obj)
+  }
+
+  // What the person should know about being heard right now: armed (wake words caught, say the
+  // rest), sent (to a session), talking (the mic is deaf), or idle. A timed cue falls back to idle.
+  function cue(state, extra = {}, ms = 0) {
+    clearTimeout(cueTimer)
+    cueTimer = null
+    broadcast({ type: 'cue', state, ...extra })
+    if (ms > 0) {
+      cueTimer = setTimeout(() => { cueTimer = null; broadcast({ type: 'cue', state: 'idle' }) }, ms)
+      cueTimer.unref?.()
+    }
+  }
+
+  function sent(name) {
+    audio.chime?.('sent')
+    cue('sent', { to: name }, SENT_CUE_MS)
   }
 
   function reportError(err) {
@@ -174,7 +194,12 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
       armedUntil,
       now: now(),
     })
-    if (r.kind === 'arm') { armedUntil = r.until; return }
+    if (r.kind === 'arm') {
+      armedUntil = r.until
+      audio.chime?.('armed')
+      cue('armed', {}, r.until - now())
+      return
+    }
     if (r.kind === 'stop') { stop(); return }
     if (r.kind !== 'deliver') return
     armedUntil = 0
@@ -184,11 +209,15 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
       recentHeard.push({ at: now(), norm: normWords(r.text) })
       if (recentHeard.length > MAX_RECENT) recentHeard.shift()
       send(streams.get(coord.sessionId), { type: 'heard', text: r.text, ...(r.name !== undefined ? { addressed: r.name } : {}) })
+      sent(coord.name)
       return
     }
     const target = (r.name !== undefined && board.byName(r.name)) || board.defaultTarget()
     // Whoever you just spoke to is the one you're working with now.
-    if (target && deliverHeard(target, r.text)) board.markActive(target.sessionId, now())
+    if (target && deliverHeard(target, r.text)) {
+      board.markActive(target.sessionId, now())
+      sent(target.name)
+    }
   }
 
   // Heard speech to one session, however its host takes it. False when it couldn't be delivered.

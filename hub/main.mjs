@@ -14,6 +14,7 @@ import { playArgv, playOutcome, listMics, FFMPEG_HINT } from './audio/index.mjs'
 import { createListenerManager } from './listener.mjs'
 import { createVad } from './vad.mjs'
 import { pcmToWav } from './wav.mjs'
+import { chimeWav } from './chime.mjs'
 import { resolveCodexArgv, queueArgv } from './hosts/codex.mjs'
 
 const { values } = parseArgs({ options: { 'state-dir': { type: 'string' } } })
@@ -66,6 +67,10 @@ const audio = {
     } finally {
       await rm(file, { force: true }).catch(() => {})
     }
+  },
+  // Fire and forget, next to (never instead of) speech: a failed chime says nothing.
+  chime(name) {
+    audio.play(chimeWav(name), new AbortController().signal).catch(() => {})
   },
 }
 
