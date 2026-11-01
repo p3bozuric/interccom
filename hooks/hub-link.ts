@@ -134,6 +134,14 @@ export function isTalking(): boolean {
   return cue === 'talking'
 }
 
+export function isMicPaused(): boolean {
+  return mic === 'paused'
+}
+
+export function currentStatus(): string {
+  return micStatus(mic, cue)
+}
+
 function showMic($: EngineInterface): void {
   $.ui.status(micStatus(mic, cue))
 }
@@ -177,12 +185,12 @@ async function handleLine($: EngineInterface, line: string): Promise<void> {
   } else if (msg.type === 'mic') {
     mic = msg.state === 'listening' ? 'on' : msg.reason === 'paused' ? 'paused' : 'not connected'
     showMic($)
+    $.ui.invalidate('ui.render')
   } else if (msg.type === 'cue') {
-    const wasTalking = isTalking()
     cue = String(msg.state ?? 'waiting')
     showMic($)
-    // The Stop button above the prompt comes and goes with the talking.
-    if (isTalking() !== wasTalking) $.ui.invalidate('ui.render')
+    // The band above the prompt shows the same word, and Stop while it talks.
+    $.ui.invalidate('ui.render')
   } else if (msg.type === 'error') {
     toastError($, String(msg.message ?? 'unknown error'))
   }

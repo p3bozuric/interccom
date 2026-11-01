@@ -2,7 +2,7 @@ import type { Register, EngineInterface } from 'claude-code'
 import { guidance, coordinatorGuidance, normalizeAutonomy } from './guidance.ts'
 import {
   startLink, hubCall, currentLink, setLinkName, reportBusy, delivery, voiceTag,
-  currentRole, requestRole, deliverReports, isTalking,
+  currentRole, requestRole, deliverReports, isTalking, isMicPaused, currentStatus,
 } from './hub-link.ts'
 import { boardText, type BoardData } from './board-view.ts'
 import { baseName, isMuted } from './link-env.ts'
@@ -56,6 +56,19 @@ async function renameSession($: EngineInterface, wanted: string): Promise<string
 async function stopTalking($: EngineInterface): Promise<number> {
   const out = (await hubCall($, 'POST', '/stop', {})) as { flushed?: unknown }
   return Number(out.flushed ?? 0)
+}
+
+let resumeMode: 'wake' | 'always' = 'wake' // what "Mic on" goes back to
+
+// Mic off is /listen off; Mic on goes back to the mode it had (wake unless it was always).
+async function toggleMic($: EngineInterface): Promise<void> {
+  if (isMicPaused()) {
+    await hubCall($, 'POST', '/listen', { mode: resumeMode })
+    return
+  }
+  const board = (await hubCall($, 'GET', '/board')) as { mode?: unknown }
+  resumeMode = board.mode === 'always' ? 'always' : 'wake'
+  await hubCall($, 'POST', '/listen', { mode: 'off' })
 }
 
 // A session title as a name: its first three words, the most a name said out loud can be.
@@ -267,16 +280,22 @@ export const register: Register = (on, opts) => {
     return next(e)
   }).catch(($, e, next) => next(e))
 
-  // While it talks, a Stop button above the prompt. The desktop app holds typed commands, even
-  // /interccom stop, until Claude's turn ends; a press reaches the plugin at once.
+  // A band above the prompt: the voice status, a mic switch, and Stop while it talks. The desktop
+  // app holds typed commands (/interccom stop, /listen) until Claude's turn ends; a press
+  // reaches the plugin at once.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    if (e.props.hasSurvey || !isTalking()) return next(e)
+    if (e.props.hasSurvey || !currentLink()) return next(e)
     const { Box, Button, Text } = $.ui.resolve(e)
-    return h(Box, null,
-      h(Text, { dimColor: true }, 'interccom is talking '),
-      h(Button, {
+    const failed = (what: string) => (err: unknown) => $.ui.toast(`interccom: couldn't ${what} (${errorText(err).slice(0, 120)})`)
+    return h(Box, { flexDirection: 'row', gap: 1 },
+      h(Text, { dimColor: true }, `interccom: ${currentStatus()}`),
+      isTalking() && h(Button, {
         key: 'stop', label: 'Stop', variant: 'primary',
-        onPress: () => stopTalking($).catch(err => $.ui.toast(`interccom: couldn't stop (${errorText(err).slice(0, 120)})`)),
+        onPress: () => stopTalking($).catch(failed('stop')),
+      }),
+      h(Button, {
+        key: 'mic', label: isMicPaused() ? 'Mic on' : 'Mic off',
+        onPress: () => toggleMic($).catch(failed('switch the mic')),
       }))
   }).catch(($, e, next) => next(e))
 
