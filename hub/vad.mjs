@@ -47,5 +47,8 @@ export function createVad(opts = {}) {
     return null
   }
 
-  return { push, reset }
+  // True from the first loud frames of an utterance until it ends.
+  const active = () => segment !== null
+
+  return { push, reset, active }
 }

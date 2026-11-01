@@ -27,8 +27,8 @@ let role: Role = 'worker'
 // Survives link restarts (a new hub, a reconnect): the session claims the role again.
 let wantCoordinator = false
 let setupChecked = false // the first-run check runs once per session
-let micOn = false
-let cue = { state: 'idle', to: '' }
+let mic: Mic = 'not connected'
+let cue = 'waiting'
 // A name the person gave (/interccom name, /rename): kept when the link restarts.
 let chosenName = ''
 export const voiceTag = makeTag()
@@ -106,17 +106,21 @@ export function reportBusy($: EngineInterface, busy: boolean): void {
   void hubCall($, 'POST', `/sessions/${encodeURIComponent(id)}/state`, { busy }).catch(() => undefined)
 }
 
-// The status line answers "is it hearing me right now?", not just "is the mic on?".
-export function micStatus(on: boolean, c: { state: string; to: string }): string {
-  if (c.state === 'talking') return "mic: talking, can't hear you"
-  if (!on) return 'mic: off'
-  if (c.state === 'armed') return 'mic: listening to you…'
-  if (c.state === 'sent') return `mic: sent to ${c.to}`
-  return 'mic: on'
+export type Mic = 'on' | 'paused' | 'not connected'
+
+// One plain word for the status line: Talking, Listening (your voice is coming in, or "Hey Claude"
+// is waiting for the rest), Processing (being transcribed), Waiting, Mic off or Not connected.
+export function micStatus(m: Mic, c: string): string {
+  if (c === 'talking') return 'Talking'
+  if (m === 'paused') return 'Mic off'
+  if (m === 'not connected') return 'Not connected'
+  if (c === 'listening') return 'Listening'
+  if (c === 'processing') return 'Processing'
+  return 'Waiting'
 }
 
 function showMic($: EngineInterface): void {
-  $.ui.status(micStatus(micOn, cue))
+  $.ui.status(micStatus(mic, cue))
 }
 
 async function deliverHeard($: EngineInterface, text: string): Promise<void> {
@@ -154,10 +158,10 @@ async function handleLine($: EngineInterface, line: string): Promise<void> {
     wantCoordinator = role === 'coordinator'
     $.ui.toast(`interccom: this session is now a ${role}${msg.reason ? ` (${String(msg.reason).slice(0, 100)})` : ''}.`)
   } else if (msg.type === 'mic') {
-    micOn = msg.state === 'listening'
+    mic = msg.state === 'listening' ? 'on' : msg.reason === 'paused' ? 'paused' : 'not connected'
     showMic($)
   } else if (msg.type === 'cue') {
-    cue = { state: String(msg.state ?? 'idle'), to: String(msg.to ?? '') }
+    cue = String(msg.state ?? 'waiting')
     showMic($)
   } else if (msg.type === 'error') {
     toastError($, String(msg.message ?? 'unknown error'))

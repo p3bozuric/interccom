@@ -290,36 +290,67 @@ test('bare wake word arms the next utterance', async () => {
 
 const cues = s => s.raw.filter(m => m.type === 'cue')
 
-test('being heard is cued: armed and sent each chime and tell every session; unheard speech does neither', async () => {
+test('chimes: one when "Hey Claude" is caught, one when your words reach a session; none for unaddressed speech', async () => {
   const audio = fakeAudio()
   audio.chimes = []
   audio.chime = name => audio.chimes.push(name)
   const { hub, register, open } = await start({ audio })
-  const a = await register('session 3')
-  const s = await open(a.sessionId)
-  const other = await open((await register('web')).sessionId)
+  const s = await open((await register('session 3')).sessionId)
   await hub.hear('just people talking')
+  assert.deepEqual(audio.chimes, [])
   await hub.hear('hey claude')
+  assert.deepEqual(audio.chimes, ['armed'])
   await hub.hear('session three, do the thing')
-  await waitFor(() => cues(other).length >= 2)
   assert.deepEqual(audio.chimes, ['armed', 'sent'])
-  assert.deepEqual(cues(s), [{ type: 'cue', state: 'armed' }, { type: 'cue', state: 'sent', to: 'session-3' }])
-  assert.deepEqual(cues(other), cues(s))
+  assert.deepEqual(await s.line(1), { type: 'heard', text: 'do the thing' })
   assert.deepEqual(audio.played, [], 'chimes never go through the talk queue')
 })
 
-test('while speech plays, sessions are told the mic is deaf; afterwards it is idle again', async () => {
+test('the cue every session sees: listening while you speak or after "Hey Claude", processing while transcribing, talking, waiting', async () => {
   const g = gate()
   const audio = fakeAudio(g)
-  const { call, register, open } = await start({ audio })
+  const { hub, call, register, open } = await start({ audio })
   const { sessionId } = await register('api')
   const s = await open(sessionId)
+  const other = await open((await register('web')).sessionId)
+  const states = () => cues(s).map(c => c.state)
+  // The listener's order: speech starts, the utterance ends and goes to STT, then the voice stops.
+  hub.speaking(true)
+  hub.transcribing(1)
+  hub.speaking(false)
+  hub.speaking(true) // talking again while the last bit is still being transcribed
+  hub.transcribing(1)
+  hub.speaking(false)
+  hub.transcribing(-1)
+  hub.transcribing(-1)
+  await waitFor(() => states().length === 5)
+  assert.deepEqual(states(), ['listening', 'processing', 'listening', 'processing', 'waiting'])
+  await hub.hear('hey claude')
+  await waitFor(() => states().length === 6)
+  assert.equal(states()[5], 'listening')
+  await hub.hear('do it')
+  await waitFor(() => states().length === 7)
+  assert.equal(states()[6], 'waiting')
   await call('POST', '/speak', { sessionId, text: 'hello', priority: 'status' })
-  await waitFor(() => cues(s).length === 1)
-  assert.deepEqual(cues(s), [{ type: 'cue', state: 'talking' }])
+  await waitFor(() => states().length === 8)
+  assert.equal(states()[7], 'talking')
   g.open()
-  await waitFor(() => cues(s).length === 2)
-  assert.deepEqual(cues(s)[1], { type: 'cue', state: 'idle' })
+  await waitFor(() => states().length === 9)
+  assert.equal(states()[8], 'waiting')
+  await waitFor(() => cues(other).length === 9)
+  assert.deepEqual(cues(other), cues(s))
+})
+
+test('"Hey Claude" alone stays listening only for its window', async () => {
+  let t = 1000
+  const { hub, register, open } = await start({ now: () => t })
+  const s = await open((await register('api')).sessionId)
+  await hub.hear('hey claude')
+  await waitFor(() => cues(s).length === 1)
+  assert.equal(cues(s)[0].state, 'listening')
+  t += 20_000
+  await waitFor(() => cues(s).length === 2, 12_000)
+  assert.equal(cues(s)[1].state, 'waiting')
 })
 
 test('stop flushes non-questions and aborts playback', async () => {

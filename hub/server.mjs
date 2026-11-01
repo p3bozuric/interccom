@@ -26,7 +26,6 @@ const MAX_INBOX = 20
 const RECENT_MS = 15 * 60_000 // how long the coordinator may relay something the person said
 const MAX_RECENT = 50
 const HOST_EVENTS = new Set(['session-start', 'prompt', 'tool', 'stop'])
-const SENT_CUE_MS = 3000 // how long "sent to <name>" stays up
 
 // Words only, lower case: "Use port 8080!" and "use port 8080" are the same quote.
 export function normWords(s) {
@@ -101,7 +100,9 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
   let micName = ''
   let lastMicError = ''
   let idleTimer = null
-  let cueTimer = null
+  let armTimer = null
+  const voice = { playing: false, speaking: false, transcribing: 0 }
+  let lastCue = 'waiting'
   const tokenBuf = Buffer.from(String(token))
 
   const player = createPlayer({
@@ -109,7 +110,7 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
     getConfig: () => ({ ...config }),
     onError: err => reportError(err),
     boardSize: () => board.size,
-    onPlaying: playing => cue(playing ? 'talking' : 'idle'),
+    onPlaying: playing => { voice.playing = playing; refreshCue() },
   })
 
   function send(res, obj) {
@@ -121,21 +122,33 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
     for (const res of streams.values()) send(res, obj)
   }
 
-  // What the person should know about being heard right now: armed (wake words caught, say the
-  // rest), sent (to a session), talking (the mic is deaf), or idle. A timed cue falls back to idle.
-  function cue(state, extra = {}, ms = 0) {
-    clearTimeout(cueTimer)
-    cueTimer = null
-    broadcast({ type: 'cue', state, ...extra })
-    if (ms > 0) {
-      cueTimer = setTimeout(() => { cueTimer = null; broadcast({ type: 'cue', state: 'idle' }) }, ms)
-      cueTimer.unref?.()
-    }
+  // What the person should know about being heard, in one word, sent to every session when it
+  // changes: talking (the mic is deaf), listening (their voice is coming in, or "Hey Claude" is
+  // waiting for the rest), processing (speech is being transcribed) or waiting.
+  function cueState() {
+    if (voice.playing) return 'talking'
+    if (voice.speaking || armedUntil > now()) return 'listening'
+    if (voice.transcribing > 0) return 'processing'
+    return 'waiting'
   }
 
-  function sent(name) {
-    audio.chime?.('sent')
-    cue('sent', { to: name }, SENT_CUE_MS)
+  function refreshCue() {
+    const state = cueState()
+    if (state === lastCue) return
+    lastCue = state
+    broadcast({ type: 'cue', state })
+  }
+
+  function arm(until) {
+    armedUntil = until
+    clearTimeout(armTimer)
+    armTimer = null
+    const ms = until - now()
+    if (ms > 0) {
+      armTimer = setTimeout(() => { armTimer = null; refreshCue() }, ms)
+      armTimer.unref?.()
+    }
+    refreshCue()
   }
 
   function reportError(err) {
@@ -174,7 +187,7 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
   }
 
   function stop() {
-    armedUntil = 0
+    arm(0)
     const flushed = queue.flush()
     player.stop()
     return flushed
@@ -195,28 +208,27 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
       now: now(),
     })
     if (r.kind === 'arm') {
-      armedUntil = r.until
       audio.chime?.('armed')
-      cue('armed', {}, r.until - now())
+      arm(r.until)
       return
     }
     if (r.kind === 'stop') { stop(); return }
     if (r.kind !== 'deliver') return
-    armedUntil = 0
+    arm(0)
     if (coord) {
       // The coordinator hears everything; a name after the wake word is a hint, and it does the routing.
       board.markActive(coord.sessionId, now())
       recentHeard.push({ at: now(), norm: normWords(r.text) })
       if (recentHeard.length > MAX_RECENT) recentHeard.shift()
       send(streams.get(coord.sessionId), { type: 'heard', text: r.text, ...(r.name !== undefined ? { addressed: r.name } : {}) })
-      sent(coord.name)
+      audio.chime?.('sent')
       return
     }
     const target = (r.name !== undefined && board.byName(r.name)) || board.defaultTarget()
     // Whoever you just spoke to is the one you're working with now.
     if (target && deliverHeard(target, r.text)) {
       board.markActive(target.sessionId, now())
-      sent(target.name)
+      audio.chime?.('sent')
     }
   }
 
@@ -535,5 +547,8 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
     onConfigChange: cb => { configListeners.push(cb) },
     isPlaying: () => player.isPlaying(),
     mutedUntil: () => player.mutedUntil(),
+    // From the listener: the person's voice started or stopped; a transcription started (+1) or ended (-1).
+    speaking: on => { voice.speaking = Boolean(on); refreshCue() },
+    transcribing: delta => { voice.transcribing = Math.max(0, voice.transcribing + delta); refreshCue() },
   }
 }
