@@ -184,12 +184,12 @@ test('hubEnv copies the environment without the API keys', () => {
 import { resolveNode } from '../../hub/launch.mjs'
 
 test('resolveNode: real node as is; inside Bun or a packaged CLI, node from PATH; override; clear error', () => {
-  assert.equal(resolveNode({ env: {}, execPath: '/usr/bin/node', versions: {} }), '/usr/bin/node')
+  assert.equal(resolveNode({ env: {}, execPath: '/usr/bin/node', versions: {}, platform: 'linux' }), '/usr/bin/node')
   assert.equal(resolveNode({ env: {}, execPath: 'C:\\Program Files\\nodejs\\node.exe', versions: {}, platform: 'win32' }), 'C:\\Program Files\\nodejs\\node.exe')
   const exists = f => f === '/opt/n/bin/node' || f === 'C:\\n\\node.exe'
-  assert.equal(resolveNode({ env: { PATH: '/x:/opt/n/bin' }, execPath: '/usr/local/bin/opencode', versions: { bun: '1.2' }, exists }), '/opt/n/bin/node')
-  assert.equal(resolveNode({ env: { PATH: '/opt/n/bin' }, execPath: '/usr/bin/node', versions: { bun: '1.2' }, exists }), '/opt/n/bin/node')
+  assert.equal(resolveNode({ env: { PATH: '/x:/opt/n/bin' }, execPath: '/usr/local/bin/opencode', versions: { bun: '1.2' }, platform: 'linux', exists }), '/opt/n/bin/node')
+  assert.equal(resolveNode({ env: { PATH: '/opt/n/bin' }, execPath: '/usr/bin/node', versions: { bun: '1.2' }, platform: 'linux', exists }), '/opt/n/bin/node')
   assert.equal(resolveNode({ env: { Path: 'C:\\x;C:\\n' }, execPath: 'C:\\copilot\\copilot.exe', versions: {}, platform: 'win32', exists }), 'C:\\n\\node.exe')
   assert.equal(resolveNode({ env: { INTERCCOM_NODE: '/my/node' }, execPath: '/opencode', versions: { bun: '1' } }), '/my/node')
-  assert.throws(() => resolveNode({ env: { PATH: '/x' }, execPath: '/opencode', versions: {}, exists: () => false }), /INTERCCOM_NODE/)
+  assert.throws(() => resolveNode({ env: { PATH: '/x' }, execPath: '/opencode', versions: {}, platform: 'linux', exists: () => false }), /INTERCCOM_NODE/)
 })

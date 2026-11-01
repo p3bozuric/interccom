@@ -6,7 +6,7 @@ import * as command from '../../hub/engines/command.mjs'
 import { createEngines, audioExt, problem, resolved, TTS_ENGINES, STT_ENGINES } from '../../hub/engines/index.mjs'
 import { EngineError } from '../../hub/engines/elevenlabs.mjs'
 
-const fixture = name => fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url))
+const fixture = name => `"${fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url))}"`
 const node = `"${process.execPath}"`
 
 function fakeFetch(res) {
