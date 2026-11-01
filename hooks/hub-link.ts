@@ -72,13 +72,10 @@ async function firstRunCheck($: EngineInterface): Promise<void> {
   } catch { /* an old hub without /setup: nothing to say */ }
 }
 
-// Submit as an automated (non-person) message; fall back if this Claude Code rejects asUser: false.
+// Submit as the plugin's message, not the person's: Claude reads it framed as
+// "The interccom plugin sent a message: ..." (asUser left out; the API has no asUser: false).
 async function submitReport($: EngineInterface, text: string): Promise<void> {
-  try {
-    await $.prompt.submit({ text, asUser: false })
-  } catch {
-    await $.prompt.submit({ text, asUser: true })
-  }
+  await $.prompt.submit({ text })
 }
 
 export async function deliverReports($: EngineInterface, text: string | undefined): Promise<void> {

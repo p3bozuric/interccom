@@ -1,4 +1,4 @@
-import type { Register, EngineInterface } from 'claude-code'
+import type { Register, EngineInterface, RenderElement } from 'claude-code'
 import { guidance, coordinatorGuidance, normalizeAutonomy } from './guidance.ts'
 import {
   startLink, hubCall, currentLink, setLinkName, reportBusy, delivery, voiceTag,
@@ -296,7 +296,7 @@ export const register: Register = (on, opts) => {
       h(Button, {
         key: 'mic', label: isMicPaused() ? 'Mic on' : 'Mic off',
         onPress: () => toggleMic($).catch(failed('switch the mic')),
-      }))
+      })) as RenderElement
   }).catch(($, e, next) => next(e))
 
   on('command.run', { command: 'listen' }, async ($, e) => listenCommand($, e.args))

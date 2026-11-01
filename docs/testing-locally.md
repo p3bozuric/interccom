@@ -111,7 +111,7 @@ Keep the two worker sessions open and open a third session, e.g. in an empty fol
 | 4.1 | `/interccom coordinator` | Confirmation text. `Get-Board` shows `"coordinator": "boss"` and its row has `role: coordinator`. |
 | 4.2 | Ask the coordinator: "What is your interccom role, and what is your autonomy preset?" | It knows it's the coordinator, preset `relay`. **If it doesn't,** the coordinator prompt section didn't take effect (see 8.2). Send one more message and ask again. Record which happened. |
 | 4.3 | In a worker, type: "Say out loud that the build passed." | **Nothing plays from the worker.** The coordinator gets a session report (a new turn, or a note during its current turn) and says something like "api says the build passed." |
-| 4.4 | Watch how 4.3's report showed up in the coordinator's transcript | Record whether it appears as a message from **you** or as an automated or system message. The plugin tries `asUser: false` first and falls back to `asUser: true` (see 8.1). |
+| 4.4 | Watch how 4.3's report showed up in the coordinator's transcript | It should appear as a message from the interccom plugin, not from you (see 8.1). |
 | 4.5 | In two workers at once: "Ask me out loud which port to use." (priority question) | The coordinator relays both questions, merged or one after the other, questions first. `Get-Board` shows `openQuestion` on both rows. |
 | 4.6 | Say "Hey Claude, where are we?" | The coordinator calls `mcp__interccom__board`, then gives one sentence per session: open questions first, then recently finished, then busy. |
 | 4.7 | Say "Hey Claude, api: use port 8080." | The coordinator gets `(to api) use port 8080.` It uses ListAgents to find the api session, then SendMessage with "The person says: use port 8080". The worker receives it. The coordinator marks api's question resolved, and `openQuestion` clears in `Get-Board`. |
@@ -299,7 +299,7 @@ opencode                                                     # start in a projec
 
 These are assumptions about Claude Code's plugin API that only a real session can confirm.
 
-1. **`$.prompt.submit({ asUser: false })`** (check 4.4). Does it exist, and how does the message show up? If it throws, the plugin falls back to `asUser: true`, which still works but labels reports as coming from you.
+1. **Reports as the plugin's message** (check 4.4). They're submitted with `$.prompt.submit({ text })`, no `asUser`, which the types say Claude reads as "The interccom plugin sent a message: …". Confirm the coordinator sees them that way.
 2. **The coordinator prompt section** (check 4.2). It's added in `prompt.compose` with `scope: 'session'`. If Claude Code caches session sections, a role switch mid-session may only take effect after a restart.
 3. **The tool name `mcp__interccom__board`** (check 4.6). It's assumed to follow the same naming as `mcp__interccom__speak`.
 4. **ListAgents / SendMessage / idle notices** (check 4.7). They're built into Claude Code. Confirm they're available in your local version and permission mode. If the worker is in a different permission mode, the message waits for approval, and the coordinator should say so.
@@ -326,7 +326,7 @@ Engines tested: <elevenlabs / local (which server) / command (which programs)>
 | 1 npm test / validate | | |
 | 2.1 … | | |
 …
-| 8.1 asUser:false | | how reports appeared |
+| 8.1 plugin's message | | how reports appeared |
 | 8.2 prompt section | | took effect immediately / after restart |
 
 ## Bugs
