@@ -1,8 +1,8 @@
-import type { Register, EngineInterface } from 'claude-code'
+import type { Register, EngineInterface, RenderElement } from 'claude-code'
 import { guidance, coordinatorGuidance, normalizeAutonomy } from './guidance.ts'
 import {
   startLink, hubCall, currentLink, setLinkName, reportBusy, delivery, voiceTag,
-  currentRole, requestRole, deliverReports,
+  currentRole, requestRole, deliverReports, isTalking, isMicPaused, currentStatus,
 } from './hub-link.ts'
 import { boardText, type BoardData } from './board-view.ts'
 import { baseName, isMuted } from './link-env.ts'
@@ -52,6 +52,45 @@ async function renameSession($: EngineInterface, wanted: string): Promise<string
   return name
 }
 
+// Ends what is playing and drops queued updates (questions stay); how many were dropped.
+async function stopTalking($: EngineInterface): Promise<number> {
+  const out = (await hubCall($, 'POST', '/stop', {})) as { flushed?: unknown }
+  return Number(out.flushed ?? 0)
+}
+
+let resumeMode: 'wake' | 'always' = 'wake' // what "Mic on" goes back to
+
+// Mic off is /listen off; Mic on goes back to the mode it had (wake unless it was always).
+async function toggleMic($: EngineInterface): Promise<void> {
+  if (isMicPaused()) {
+    await hubCall($, 'POST', '/listen', { mode: resumeMode })
+    return
+  }
+  const board = (await hubCall($, 'GET', '/board')) as { mode?: unknown }
+  resumeMode = board.mode === 'always' ? 'always' : 'wake'
+  await hubCall($, 'POST', '/listen', { mode: 'off' })
+}
+
+// A session title as a name: its first three words, the most a name said out loud can be.
+export function titleName(title: string): string {
+  return title.trim().replace(/^["']|["']$/g, '').split(/\s+/).slice(0, 3).join(' ')
+}
+
+let lastTitle = ''
+
+// Follow the session's title (/rename, the desktop app's sidebar, or its own automatic title)
+// whenever it changes; a name set with /interccom name stands until the title changes again.
+async function followTitle($: EngineInterface, title: unknown): Promise<void> {
+  const wanted = titleName(String(title ?? ''))
+  if (!wanted || wanted === lastTitle) return
+  lastTitle = wanted
+  try {
+    await renameSession($, wanted)
+  } catch (err) {
+    $.ui.toast(`interccom: couldn't use the session's name (${errorText(err).slice(0, 120)})`)
+  }
+}
+
 async function interccomCommand($: EngineInterface, args: string): Promise<{ text: string }> {
   const usage = { text: 'Usage: /interccom setup [test] | name <name> | status | stop | coordinator [take] | worker' }
   const trimmed = args.trim()
@@ -89,8 +128,7 @@ async function interccomCommand($: EngineInterface, args: string): Promise<{ tex
     return { text: 'This session is a worker again.' }
   }
   if (sub.toLowerCase() === 'stop') {
-    const out = (await hubCall($, 'POST', '/stop', {})) as { flushed?: unknown }
-    return { text: `Stopped. Cleared ${Number(out.flushed ?? 0)} queued updates.` }
+    return { text: `Stopped. Cleared ${await stopTalking($)} queued updates.` }
   }
   return usage
 }
@@ -242,23 +280,44 @@ export const register: Register = (on, opts) => {
     return next(e)
   }).catch(($, e, next) => next(e))
 
+  // A band above the prompt: the voice status, a mic switch, and Stop while it talks. The desktop
+  // app holds typed commands (/interccom stop, /listen) until Claude's turn ends; a press
+  // reaches the plugin at once.
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    if (e.props.hasSurvey || !currentLink()) return next(e)
+    const { Box, Button, Text } = $.ui.resolve(e)
+    const failed = (what: string) => (err: unknown) => $.ui.toast(`interccom: couldn't ${what} (${errorText(err).slice(0, 120)})`)
+    return h(Box, { flexDirection: 'row', gap: 1 },
+      h(Text, { dimColor: true }, `interccom: ${currentStatus()}`),
+      isTalking() && h(Button, {
+        key: 'stop', label: 'Stop', variant: 'primary',
+        onPress: () => stopTalking($).catch(failed('stop')),
+      }),
+      h(Button, {
+        key: 'mic', label: isMicPaused() ? 'Mic on' : 'Mic off',
+        onPress: () => toggleMic($).catch(failed('switch the mic')),
+      })) as RenderElement
+  }).catch(($, e, next) => next(e))
+
   on('command.run', { command: 'listen' }, async ($, e) => listenCommand($, e.args))
     .catch(($, e, next) => ({ text: `interccom: ${errorText(next.error)}` }))
 
   on('command.run', { command: 'interccom' }, async ($, e) => interccomCommand($, e.args))
     .catch(($, e, next) => ({ text: `interccom: ${errorText(next.error)}` }))
 
-  // Claude Code's own /rename names this session for interccom too. The rename itself always runs.
+  // The session's title is its name: at start (a resumed session keeps its title), with every
+  // prompt (a rename in the desktop sidebar), and straight away on /rename.
+  on('classic.SessionStart', async ($, e, next) => {
+    await followTitle($, e.session_title)
+    return next(e)
+  }).catch(($, e, next) => next(e))
+  on('classic.UserPromptSubmit', async ($, e, next) => {
+    await followTitle($, e.session_title)
+    return next(e)
+  }).catch(($, e, next) => next(e))
   on('command.run', { command: 'rename' }, async ($, e, next) => {
     const ran = await next(e)
-    const wanted = e.args.trim().replace(/^["']|["']$/g, '')
-    if (wanted) {
-      try {
-        await renameSession($, wanted)
-      } catch (err) {
-        $.ui.toast(`interccom: couldn't use the new name (${errorText(err).slice(0, 120)})`)
-      }
-    }
+    await followTitle($, e.args)
     return ran
   })
 }

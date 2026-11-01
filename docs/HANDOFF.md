@@ -60,7 +60,7 @@ Only Claude Code sessions can be the coordinator (the role relies on SendMessage
 
 ## Builder's calls worth reviewing
 
-- Reports to the coordinator are submitted with `asUser: false`, falling back to `asUser: true` if Claude Code rejects it.
+- Reports to the coordinator are submitted as the plugin's message (no `asUser`), which Claude reads as "The interccom plugin sent a message: …". The API has no `asUser: false`; that was found by type-checking on 2026-11-01.
 - The coordinator may relay only a quote of what you said to it in the last 15 minutes (whole words), never its own instructions.
 - API keys are never written to disk by interccom. `config.json` holds choices only.
 - `local_tts_model` / `local_tts_voice` / `local_stt_model` were replaced by `tts_model` / `tts_voice` / `stt_model`. `voice_id` is still read.
@@ -78,7 +78,7 @@ Only Claude Code sessions can be the coordinator (the role relies on SendMessage
 
 **Not verified (needs your PC):**
 - mic and speakers on any OS;
-- Claude Code loading the plugin: install questions, `asUser: false`, the coordinator prompt section, SendMessage relay;
+- Claude Code loading the plugin: install questions, the coordinator prompt section, SendMessage relay;
 - the real Codex and Copilot runs;
 - the OpenCode model side;
 - **first real calls to Deepgram, Soniox, OpenAI, Groq and Cartesia.** They were built from their official npm SDKs because their docs were blocked in the cloud session. Check especially Soniox latency and cleanup, and Cartesia's `cartesia-version: 2026-08-14` header and default voice.

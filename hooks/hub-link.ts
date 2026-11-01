@@ -72,17 +72,25 @@ async function firstRunCheck($: EngineInterface): Promise<void> {
   } catch { /* an old hub without /setup: nothing to say */ }
 }
 
-// Submit as an automated (non-person) message; fall back if this Claude Code rejects asUser: false.
+// Submit as the plugin's message, not the person's: Claude reads it framed as
+// "The interccom plugin sent a message: ..." (asUser left out; the API has no asUser: false).
 async function submitReport($: EngineInterface, text: string): Promise<void> {
-  try {
-    await $.prompt.submit({ text, asUser: false })
-  } catch {
-    await $.prompt.submit({ text, asUser: true })
-  }
+  await $.prompt.submit({ text })
 }
 
 export async function deliverReports($: EngineInterface, text: string | undefined): Promise<void> {
   if (text) await submitReport($, text)
+}
+
+async function claimName($: EngineInterface, wanted: string): Promise<void> {
+  const id = link?.sessionId
+  if (!id) return
+  try {
+    const out = (await hubCall($, 'POST', `/sessions/${encodeURIComponent(id)}/name`, { name: wanted })) as { name?: unknown }
+    setLinkName(String(out.name ?? wanted))
+  } catch (err) {
+    toastError($, `couldn't use the session's name (${String((err as Error)?.message ?? err).slice(0, 120)})`)
+  }
 }
 
 export function setLinkName(name: string): void {
@@ -119,6 +127,18 @@ export function micStatus(m: Mic, c: string): string {
   return 'Waiting'
 }
 
+export function isTalking(): boolean {
+  return cue === 'talking'
+}
+
+export function isMicPaused(): boolean {
+  return mic === 'paused'
+}
+
+export function currentStatus(): string {
+  return micStatus(mic, cue)
+}
+
 function showMic($: EngineInterface): void {
   $.ui.status(micStatus(mic, cue))
 }
@@ -141,6 +161,8 @@ async function handleLine($: EngineInterface, line: string): Promise<void> {
     linkedAt = Date.now()
     // A new registration starts idle, as a worker, on the hub: bring it up to date.
     reportBusy($, delivery.isBusy())
+    // A name chosen while the link was starting (the session's title arrives at about the same time).
+    if (chosenName && chosenName !== link.name) await claimName($, chosenName)
     role = 'worker'
     if (wantCoordinator) await reclaimRole($)
     if (!setupChecked) { setupChecked = true; void firstRunCheck($) }
@@ -160,9 +182,12 @@ async function handleLine($: EngineInterface, line: string): Promise<void> {
   } else if (msg.type === 'mic') {
     mic = msg.state === 'listening' ? 'on' : msg.reason === 'paused' ? 'paused' : 'not connected'
     showMic($)
+    $.ui.invalidate('ui.render')
   } else if (msg.type === 'cue') {
     cue = String(msg.state ?? 'waiting')
     showMic($)
+    // The band above the prompt shows the same word, and Stop while it talks.
+    $.ui.invalidate('ui.render')
   } else if (msg.type === 'error') {
     toastError($, String(msg.message ?? 'unknown error'))
   }

@@ -115,7 +115,7 @@ async function withHub(env, fn) {
   return fn(call)
 }
 
-export async function runSetup(args, { env = process.env, stdin = process.stdin } = {}) {
+export async function runSetup(args, { env = process.env, stdin = process.stdin, hub = withHub } = {}) {
   const { parseArgs } = await import('node:util')
   const options = Object.fromEntries(Object.keys(FLAGS).map(f => [f, { type: 'string' }]))
   options.show = { type: 'boolean' }
@@ -125,22 +125,21 @@ export async function runSetup(args, { env = process.env, stdin = process.stdin 
   const current = readConfigFile(file)
   let choices = Object.fromEntries(Object.entries(FLAGS).filter(([f]) => values[f] !== undefined).map(([f, s]) => [s, values[f]]))
 
-  if (!values.show && !values.test) {
-    if (!Object.keys(choices).length && stdin.isTTY) {
-      const rl = createInterface({ input: stdin, output: process.stdout })
-      try { choices = await interactive(current, rl) } finally { rl.close() }
-    }
-    if (Object.keys(choices).length) {
-      const bad = validate(choices)
-      if (bad) { console.error(bad); process.exitCode = 1; return }
-      const saved = saveChoices(file, current, choices)
-      console.log(`\nSaved to ${file}.`)
-      for (const l of keyAdvice(saved, { env })) console.log(l)
-      console.log('Claude Code sessions use their own plugin settings (/plugin → interccom → configure) instead.\n')
-    }
+  // The wizard runs only for a bare `setup`; flags are saved even next to --show or --test.
+  if (!Object.keys(choices).length && !values.show && !values.test && stdin.isTTY) {
+    const rl = createInterface({ input: stdin, output: process.stdout })
+    try { choices = await interactive(current, rl) } finally { rl.close() }
+  }
+  if (Object.keys(choices).length) {
+    const bad = validate(choices)
+    if (bad) { console.error(bad); process.exitCode = 1; return }
+    const saved = saveChoices(file, current, choices)
+    console.log(`\nSaved to ${file}.`)
+    for (const l of keyAdvice(saved, { env })) console.log(l)
+    console.log('Claude Code sessions use their own plugin settings (/plugin → interccom → configure) instead.\n')
   }
   try {
-    await withHub(env, async call => {
+    await hub(env, async call => {
       const report = await call('GET', '/setup')
       console.log(report.text)
       if (values.test) {

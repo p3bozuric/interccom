@@ -45,6 +45,11 @@ test('local errors name the cause: unreachable, 404 path, bad URL, other status'
     e => e instanceof EngineError && e.code === 'network' && /Couldn't reach the local speech server .*server is running/.test(e.message))
   await assert.rejects(local.stt(Buffer.from('w'), { url: 'http://h/v1', model: 'm', fetch: fakeFetch(new Response('no', { status: 404 })) }),
     e => e.code === 'config' && /\/v1\/audio\/transcriptions/.test(e.message))
+  // Speaches' own answer for a model it hasn't downloaded (seen live with speaches:latest-cpu).
+  const notInstalled = JSON.stringify({ detail: "Model 'Systran/faster-whisper-small' is not installed locally. You can download the model using `POST /v1/models`" })
+  await assert.rejects(local.stt(Buffer.from('w'), { url: 'http://127.0.0.1:8000/v1', model: 'Systran/faster-whisper-small', fetch: fakeFetch(new Response(notInstalled, { status: 404 })) }),
+    e => e.code === 'config' && e.message.includes("hasn't downloaded the model Systran/faster-whisper-small")
+      && e.message.includes('curl -X POST http://127.0.0.1:8000/v1/models/Systran/faster-whisper-small'))
   await assert.rejects(local.tts('a', { url: 'not a url', fetch: fakeFetch(new Response('')) }), e => e.code === 'config')
   await assert.rejects(local.tts('a', { url: 'file:///x', fetch: fakeFetch(new Response('')) }), e => e.code === 'config')
   await assert.rejects(local.tts('a', { url: 'http://h/v1', fetch: fakeFetch(new Response('boom', { status: 500 })) }),

@@ -130,6 +130,28 @@ test('keyAdvice: setx on Windows, export elsewhere, ✓ when found; local engine
   assert.deepEqual(keyAdvice({ tts_engine: 'local', stt_engine: 'command' }, { env: {}, platform: 'linux' }), [])
 })
 
+test('setup flags are saved even next to --test or --show', async () => {
+  const { runSetup } = await import('../../hub/setup-cli.mjs')
+  const d = tmp()
+  const calls = []
+  // A stand-in hub: it sees the choices already saved, as the real one would read them.
+  const hub = async (env, fn) => fn(async (method, p) => {
+    calls.push([method, p, JSON.parse(fs.readFileSync(path.join(d, 'config.json'), 'utf8')).tts_engine])
+    return p === '/sessions' ? { sessionId: 's' } : { text: '' }
+  })
+  const log = console.log
+  console.log = () => {}
+  try {
+    await runSetup(['--tts', 'local', '--stt', 'local', '--show'], { env: { INTERCCOM_STATE_DIR: d }, hub })
+  } finally {
+    console.log = log
+  }
+  const saved = JSON.parse(fs.readFileSync(path.join(d, 'config.json'), 'utf8'))
+  assert.equal(saved.tts_engine, 'local')
+  assert.equal(saved.stt_engine, 'local')
+  assert.deepEqual(calls, [['GET', '/setup', 'local']])
+})
+
 test('interactive setup asks for both engines, then only what the choice needs', async () => {
   const asked = []
   const answers = ['soniox', 'local', '', '', '', '', 'hr', 'always']
