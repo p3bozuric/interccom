@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/assets/hero.svg" alt="interccom: talk to your coding agents, let them talk back" width="100%"></p>
+
 # interccom
 
 **Talk to your coding agents. Let them talk back.**
@@ -12,13 +14,7 @@ Speech can run in the cloud (ElevenLabs, Deepgram, Soniox, OpenAI, Groq, Cartesi
 
 ## How it works
 
-```
- mic ─► hub (one per machine) ─► speakers
-          ▲            │
-   speak  │            │  what you said
-          │            ▼
-   Claude Code sessions (interccom plugin in each)
-```
+<p align="center"><img src="docs/assets/how-it-works.svg" alt="You talk to the mic and hear the speakers; one hub per machine owns both and routes speech between you and every session" width="100%"></p>
 
 - A small **hub** process runs in the background on your machine. It owns the mic and the speakers, so two sessions never talk over each other, and Claude never hears itself.
 - Each Claude Code session gets a `speak` tool and instructions to use it sparingly, the way a colleague would.
@@ -106,6 +102,8 @@ Claude Code asks which engines to use for talking and listening. Add the API key
 - **Listening mode:** `/listen wake` (default), `/listen always` (everything you say is sent), `/listen off`.
 
 ### The coordinator
+
+<p align="center"><img src="docs/assets/coordinator.svg" alt="You talk only to the coordinator; it passes your words to the other sessions and they report back quietly" width="100%"></p>
 
 Run `/interccom coordinator` in one session, ideally a dedicated one in an empty folder. From then on:
 

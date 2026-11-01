@@ -1,0 +1,114 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="560" viewBox="0 0 1200 560" role="img" aria-labelledby="title desc">
+  <title id="title">The interccom coordinator</title>
+  <desc id="desc">You talk only to the coordinator. It passes your words to the other sessions with SendMessage, they report back quietly, and it decides what is worth saying out loud. Its autonomy is relay, routine or full; anything destructive or outward-facing comes back to you.</desc>
+  <defs>
+    <marker id="amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#F5A524"/>
+    </marker>
+    <marker id="cyan" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#56D4DD"/>
+    </marker>
+    <marker id="grey" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#8B949E"/>
+    </marker>
+    <style>
+      .sans { font-family: ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
+      .h { font-size: 18px; font-weight: 600; fill: #F0F6FC; }
+      .t { font-size: 14px; fill: #C9D1D9; }
+      .m { font-size: 13px; fill: #8B949E; }
+      .cap { font-size: 12px; letter-spacing: 1.8px; fill: #7D8590; }
+      .flow { stroke-dasharray: 6 8; animation: flow 1.2s linear infinite; }
+      @keyframes flow { to { stroke-dashoffset: -14; } }
+      @media (prefers-reduced-motion: reduce) { .flow { animation: none; } }
+    </style>
+  </defs>
+
+  <rect width="1200" height="560" rx="24" fill="#0D1117"/>
+  <rect x="0.5" y="0.5" width="1199" height="559" rx="23.5" fill="none" stroke="#30363D"/>
+
+  <text x="48" y="64" class="sans" font-size="26" font-weight="700" fill="#F0F6FC">The coordinator</text>
+  <text x="48" y="92" class="sans t" fill="#8B949E">Talk to one session. It keeps track of the rest for you.</text>
+
+  <text x="48" y="148" class="mono cap">YOU</text>
+  <text x="392" y="148" class="mono cap">COORDINATOR</text>
+  <text x="872" y="148" class="mono cap">WORKERS · QUIET</text>
+
+  <!-- YOU -->
+  <g class="sans">
+    <rect x="48" y="166" width="236" height="276" rx="16" fill="#161B22" stroke="#30363D"/>
+    <circle cx="166" cy="226" r="34" fill="#11161D" stroke="#56D4DD" stroke-width="1.5"/>
+    <g transform="translate(152 208)" fill="none" stroke="#56D4DD" stroke-width="2.2" stroke-linecap="round">
+      <rect x="6" y="0" width="16" height="26" rx="8"/>
+      <path d="M0 16 a14 14 0 0 0 28 0"/>
+      <path d="M14 30 v5"/>
+    </g>
+    <rect x="68" y="282" width="196" height="64" rx="12" fill="#11161D" stroke="#56D4DD" stroke-opacity="0.5"/>
+    <text x="84" y="308" class="t">“Hey Claude,</text>
+    <text x="84" y="328" class="t">where are we?”</text>
+    <rect x="68" y="358" width="196" height="64" rx="12" fill="#11161D" stroke="#F5A524" stroke-opacity="0.5"/>
+    <text x="84" y="384" class="t">“api is green. docs</text>
+    <text x="84" y="404" class="t">needs your call on…”</text>
+  </g>
+
+  <!-- COORDINATOR -->
+  <g class="sans">
+    <rect x="392" y="166" width="380" height="276" rx="18" fill="#161B22" stroke="#F5A524" stroke-width="1.5"/>
+    <text x="420" y="204" class="h">coordinator</text>
+    <text x="536" y="204" class="m">a dedicated Claude Code session</text>
+    <g class="t">
+      <circle cx="426" cy="244" r="3.5" fill="#F5A524"/>
+      <text x="442" y="249">Hears everything you say</text>
+      <circle cx="426" cy="280" r="3.5" fill="#F5A524"/>
+      <text x="442" y="285">Passes on your words with SendMessage</text>
+      <circle cx="426" cy="316" r="3.5" fill="#F5A524"/>
+      <text x="442" y="321">Merges reports, names the session</text>
+    </g>
+    <line x1="420" y1="350" x2="744" y2="350" stroke="#30363D"/>
+    <text x="420" y="376" class="mono m">autonomy</text>
+    <rect x="420" y="390" width="84" height="30" rx="15" fill="#F5A524"/>
+    <text x="462" y="410" text-anchor="middle" font-size="14" font-weight="600" fill="#0D1117">relay</text>
+    <rect x="514" y="390" width="96" height="30" rx="15" fill="none" stroke="#F5A524" stroke-opacity="0.6"/>
+    <text x="562" y="410" text-anchor="middle" class="t">routine</text>
+    <rect x="620" y="390" width="72" height="30" rx="15" fill="none" stroke="#F5A524" stroke-opacity="0.6"/>
+    <text x="656" y="410" text-anchor="middle" class="t">full</text>
+  </g>
+
+  <!-- WORKERS -->
+  <g class="sans">
+    <rect x="872" y="166" width="280" height="76" rx="14" fill="#161B22" stroke="#30363D"/>
+    <circle cx="896" cy="204" r="5" fill="#3FB950"/>
+    <text x="912" y="200" class="h" font-size="16">api</text>
+    <text x="912" y="221" class="m">Claude Code · tests pass</text>
+
+    <rect x="872" y="266" width="280" height="76" rx="14" fill="#161B22" stroke="#30363D"/>
+    <circle cx="896" cy="304" r="5" fill="#3FB950"/>
+    <text x="912" y="300" class="h" font-size="16">frontend</text>
+    <text x="912" y="321" class="m">Claude Code · working</text>
+
+    <rect x="872" y="366" width="280" height="76" rx="14" fill="#161B22" stroke="#58A6FF" stroke-opacity="0.7"/>
+    <circle cx="896" cy="404" r="5" fill="#58A6FF"/>
+    <text x="912" y="400" class="h" font-size="16">docs</text>
+    <text x="912" y="421" class="m">Claude Code · has a question</text>
+  </g>
+
+  <!-- Arrows you <-> coordinator -->
+  <path class="flow" d="M284 280 L388 280" fill="none" stroke="#56D4DD" stroke-width="2.2" marker-end="url(#cyan)"/>
+  <text x="300" y="268" class="sans m" fill="#56D4DD">voice</text>
+  <path class="flow" d="M392 340 L288 340" fill="none" stroke="#F5A524" stroke-width="2.2" marker-end="url(#amber)"/>
+  <text x="300" y="364" class="sans m" fill="#F5A524">what matters</text>
+
+  <!-- Arrows coordinator <-> workers -->
+  <g fill="none" stroke="#484F58" stroke-width="1.5">
+    <path d="M860 204 V404"/>
+    <path d="M860 204 H872 M860 304 H872 M860 404 H872"/>
+  </g>
+  <path class="flow" d="M772 272 H856" fill="none" stroke="#56D4DD" stroke-width="2.2" marker-end="url(#cyan)"/>
+  <text x="816" y="260" class="sans" font-size="12" fill="#56D4DD" text-anchor="middle">your words</text>
+  <path class="flow" d="M858 340 H776" fill="none" stroke="#8B949E" stroke-width="2.2" marker-end="url(#grey)"/>
+  <text x="816" y="362" class="sans" font-size="12" fill="#8B949E" text-anchor="middle">reports</text>
+
+  <!-- Footer -->
+  <rect x="48" y="474" width="1104" height="52" rx="12" fill="#11161D" stroke="#30363D"/>
+  <text x="600" y="506" text-anchor="middle" class="sans t">Anything destructive or outward-facing comes back to you. It never approves permission prompts.</text>
+</svg>

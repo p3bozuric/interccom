@@ -1,0 +1,132 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="600" viewBox="0 0 1200 600" role="img" aria-labelledby="title desc">
+  <title id="title">How interccom works</title>
+  <desc id="desc">You talk into the mic and hear the speakers. One hub per machine owns both, lets one session speak at a time, and routes what you said to the session you named. Idle sessions get it as your next message; busy ones get it at their next step.</desc>
+  <defs>
+    <marker id="amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#F5A524"/>
+    </marker>
+    <marker id="cyan" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#56D4DD"/>
+    </marker>
+    <style>
+      .sans { font-family: ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
+      .h { font-size: 18px; font-weight: 600; fill: #F0F6FC; }
+      .t { font-size: 14px; fill: #C9D1D9; }
+      .m { font-size: 13px; fill: #8B949E; }
+      .cap { font-size: 12px; letter-spacing: 1.8px; fill: #7D8590; }
+      .flow { stroke-dasharray: 6 8; animation: flow 1.2s linear infinite; }
+      @keyframes flow { to { stroke-dashoffset: -14; } }
+      @media (prefers-reduced-motion: reduce) { .flow { animation: none; } }
+    </style>
+  </defs>
+
+  <rect width="1200" height="600" rx="24" fill="#0D1117"/>
+  <rect x="0.5" y="0.5" width="1199" height="599" rx="23.5" fill="none" stroke="#30363D"/>
+
+  <text x="48" y="64" class="sans" font-size="26" font-weight="700" fill="#F0F6FC">How it works</text>
+  <text x="48" y="92" class="sans t" fill="#8B949E">One hub per machine. Every session, every agent, one voice channel.</text>
+
+  <!-- Column captions -->
+  <text x="48" y="148" class="mono cap">YOU</text>
+  <text x="392" y="148" class="mono cap">HUB · ONE PER MACHINE</text>
+  <text x="872" y="148" class="mono cap">SESSIONS</text>
+
+  <!-- YOU -->
+  <g class="sans">
+    <rect x="48" y="166" width="236" height="120" rx="16" fill="#161B22" stroke="#56D4DD" stroke-opacity="0.6"/>
+    <g transform="translate(76 196)" fill="none" stroke="#56D4DD" stroke-width="2.2" stroke-linecap="round">
+      <rect x="6" y="0" width="16" height="28" rx="8"/>
+      <path d="M0 18 a14 14 0 0 0 28 0"/>
+      <path d="M14 32 v8"/>
+    </g>
+    <text x="124" y="210" class="h">Mic</text>
+    <text x="124" y="233" class="m">“Hey Claude, api:</text>
+    <text x="124" y="252" class="m">run the tests.”</text>
+
+    <rect x="48" y="358" width="236" height="120" rx="16" fill="#161B22" stroke="#F5A524" stroke-opacity="0.6"/>
+    <g transform="translate(76 392)" fill="none" stroke="#F5A524" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M0 10 h7 l10 -9 v30 l-10 -9 h-7 z"/>
+      <path d="M23 9 a9 9 0 0 1 0 14"/>
+      <path d="M27 3 a16 16 0 0 1 0 26"/>
+    </g>
+    <text x="124" y="402" class="h">Speakers</text>
+    <text x="124" y="425" class="m">“api: done,</text>
+    <text x="124" y="444" class="m">all tests pass.”</text>
+  </g>
+
+  <!-- HUB -->
+  <g class="sans">
+    <rect x="392" y="166" width="380" height="312" rx="18" fill="#161B22" stroke="#F5A524" stroke-width="1.5"/>
+    <g fill="#F5A524">
+      <rect x="420" y="192" width="5" height="18" rx="2.5"/>
+      <rect x="429" y="186" width="5" height="30" rx="2.5"/>
+      <rect x="438" y="182" width="5" height="38" rx="2.5"/>
+      <rect x="447" y="189" width="5" height="24" rx="2.5"/>
+      <rect x="456" y="194" width="5" height="14" rx="2.5"/>
+    </g>
+    <text x="476" y="208" class="h">hub</text>
+    <text x="520" y="208" class="m">background process</text>
+
+    <g class="t">
+      <circle cx="426" cy="256" r="3.5" fill="#F5A524"/>
+      <text x="442" y="261">Owns the mic and the speakers</text>
+      <circle cx="426" cy="296" r="3.5" fill="#F5A524"/>
+      <text x="442" y="301">One voice at a time: sessions take turns</text>
+      <circle cx="426" cy="336" r="3.5" fill="#F5A524"/>
+      <text x="442" y="341">Wake word, then routes by session name</text>
+      <circle cx="426" cy="376" r="3.5" fill="#F5A524"/>
+      <text x="442" y="381">Never hears itself talking</text>
+    </g>
+    <line x1="420" y1="410" x2="744" y2="410" stroke="#30363D"/>
+    <text x="420" y="436" class="mono m">speech engines</text>
+    <text x="420" y="458" class="t">cloud APIs  or  fully local</text>
+  </g>
+
+  <!-- SESSIONS -->
+  <g class="sans">
+    <rect x="872" y="166" width="280" height="64" rx="14" fill="#161B22" stroke="#F5A524" stroke-opacity="0.7"/>
+    <circle cx="896" cy="198" r="5" fill="#F5A524"/>
+    <text x="912" y="194" class="h" font-size="16">api</text>
+    <text x="912" y="214" class="m">Claude Code</text>
+
+    <rect x="872" y="248" width="280" height="64" rx="14" fill="#161B22" stroke="#30363D"/>
+    <circle cx="896" cy="280" r="5" fill="#3FB950"/>
+    <text x="912" y="276" class="h" font-size="16">frontend</text>
+    <text x="912" y="296" class="m">Codex</text>
+
+    <rect x="872" y="330" width="280" height="64" rx="14" fill="#161B22" stroke="#30363D"/>
+    <circle cx="896" cy="362" r="5" fill="#58A6FF"/>
+    <text x="912" y="358" class="h" font-size="16">docs</text>
+    <text x="912" y="378" class="m">Copilot CLI</text>
+
+    <rect x="872" y="412" width="280" height="64" rx="14" fill="#161B22" stroke="#30363D"/>
+    <circle cx="896" cy="444" r="5" fill="#3FB950"/>
+    <text x="912" y="440" class="h" font-size="16">infra</text>
+    <text x="912" y="460" class="m">OpenCode</text>
+  </g>
+
+  <!-- Arrows: you <-> hub -->
+  <path class="flow" d="M284 226 C 336 226, 340 240, 388 240" fill="none" stroke="#56D4DD" stroke-width="2.2" marker-end="url(#cyan)"/>
+  <text x="300" y="214" class="sans m" fill="#56D4DD">your voice</text>
+  <path class="flow" d="M392 404 C 340 404, 336 418, 288 418" fill="none" stroke="#F5A524" stroke-width="2.2" marker-end="url(#amber)"/>
+  <text x="300" y="448" class="sans m" fill="#F5A524">one at a time</text>
+
+  <!-- Arrows: hub <-> sessions -->
+  <g fill="none" stroke="#484F58" stroke-width="1.5">
+    <path d="M860 198 V444"/>
+    <path d="M860 198 H872 M860 280 H872 M860 362 H872 M860 444 H872"/>
+  </g>
+  <path class="flow" d="M858 272 H776" fill="none" stroke="#F5A524" stroke-width="2.2" marker-end="url(#amber)"/>
+  <text x="816" y="260" class="sans" font-size="12" fill="#F5A524" text-anchor="middle">speak</text>
+  <path class="flow" d="M772 372 H856" fill="none" stroke="#56D4DD" stroke-width="2.2" marker-end="url(#cyan)"/>
+  <text x="816" y="394" class="sans" font-size="12" fill="#56D4DD" text-anchor="middle">what you said</text>
+
+  <!-- Footer: delivery -->
+  <g class="sans">
+    <rect x="48" y="512" width="540" height="48" rx="12" fill="#11161D" stroke="#30363D"/>
+    <text x="68" y="542" class="t"><tspan fill="#56D4DD" font-weight="600">Session idle</tspan>  →  arrives as your next message</text>
+    <rect x="612" y="512" width="540" height="48" rx="12" fill="#11161D" stroke="#30363D"/>
+    <text x="632" y="542" class="t"><tspan fill="#56D4DD" font-weight="600">Session mid-task</tspan>  →  attached to its next step</text>
+  </g>
+</svg>
