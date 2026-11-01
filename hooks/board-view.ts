@@ -7,6 +7,7 @@ export type BoardRow = {
 export type BoardData = {
   sessions?: BoardRow[]; coordinator?: unknown; mode?: unknown
   decisions?: { at?: unknown; text?: unknown }[]
+  approvals?: { name?: unknown; summary?: unknown; confirming?: unknown }[]
 }
 
 export function ago(ms: number): string {
@@ -42,6 +43,11 @@ export function boardText(board: BoardData, now: number): string {
     return `- ${parts.join(' — ')}`
   })
   const out = [`Coordinator: ${board.coordinator ? String(board.coordinator) : 'none'}. Listening: ${String(board.mode ?? '?')}.`, ...lines]
+  const approvals = board.approvals ?? []
+  if (approvals.length) {
+    out.push('Permission requests waiting for the person (only their voice or their dialog can answer):')
+    for (const a of approvals) out.push(`- ${String(a.name)} wants to ${String(a.summary)}${a.confirming ? ' (asked to confirm)' : ''}`)
+  }
   const decisions = (board.decisions ?? []).slice(-5)
   if (decisions.length) {
     out.push('Decisions made without the person (newest last):')

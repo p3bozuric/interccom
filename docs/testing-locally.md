@@ -102,6 +102,22 @@ Open a second session in another folder. To test a name collision, use a folder 
 | 3.4 | Say something with no name | Goes to the session you last typed in or spoke to. |
 | 3.5 | `/interccom name frontend` in one session, then "Hey Claude, frontend: hi" | Reaches the renamed session. |
 
+## 3b. Permission prompts by voice
+
+Use a session in the default permission mode, so commands ask. Keep the mic on.
+
+| # | Do | Expect |
+|---|---|---|
+| 3b.1 | Ask Claude to run `npm test` (or any command that asks) | The dialog appears, with the line 'interccom: say "approve" or "deny", or answer here' under it. You hear "<session> wants to run npm test. Approve?" |
+| 3b.2 | Say "approve" | Falling chime. The dialog closes and the command runs. **Record whether the dialog closed by itself**, or stayed until you clicked (see 8.12). |
+| 3b.3 | Again, and say "deny" | The command is refused; Claude reads "The person said no, by voice." |
+| 3b.4 | Again, and answer in the dialog instead | It goes on as usual. A later "approve" does nothing (`/interccom status` shows no waiting request). |
+| 3b.5 | Ask for something destructive (`git push`, `rm -rf build`) and say "approve" | "Confirm: <session> will run …. Say confirm, or deny." "yes" does nothing; "confirm" lets it run. |
+| 3b.6 | Two sessions asking at once; say "yes" | Nothing: two are open. "approve <name>" picks one. |
+| 3b.7 | Say nothing for a minute | The request is withdrawn; the dialog still waits for you. |
+| 3b.8 | `/listen off` (Mic off), then trigger a prompt | No announcement; the dialog only. |
+| 3b.9 | With a coordinator: a worker asks for permission | The coordinator can mention it (`board`) but your "approve" goes to the request, never to the coordinator. |
+
 ## 4. Coordinator: role and routing
 
 Keep the two worker sessions open and open a third session, e.g. in an empty folder `C:\work\boss`. Run `/interccom coordinator` in it.
@@ -313,6 +329,8 @@ These are assumptions about Claude Code's plugin API that only a real session ca
 9. **OpenCode, model side** (7f): that `experimental.chat.system.transform` guidance reaches the model, and that the voice note appended in `tool.execute.after` is seen.
 10. **Cloud providers** (7c-2): first real calls to Deepgram, Soniox, OpenAI, Groq and Cartesia. In particular: the Soniox polling delay and cleanup, and whether Cartesia's `cartesia-version: 2026-08-14` header is accepted.
 11. **Install questions** (1b.1): how Claude Code presents the two required engine choices.
+12. **The PermissionRequest hook runs while the dialog is up** (3b.2, 3b.4). The plugin waits for your voice inside `classic.PermissionRequest` (its own time budget stops during `$` calls). Confirm: the dialog shows at once rather than after the wait; a voice answer closes it; a dialog answer ends the wait (`next.signal`). If the dialog only appears after the wait ends, the hook has to answer `ask` at once and the feature becomes announce-only.
+13. **tool.check and PermissionRequest see the same input** (3b.1). The two are matched by tool name plus the input JSON; if they differ, nothing is announced.
 
 ## 9. Results template
 

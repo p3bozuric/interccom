@@ -100,10 +100,24 @@ Claude Code asks which engines to use for talking and listening. Add the API key
 ## Using it
 
 - **Talk:** start with the wake word, "Hey Claude, …". You can also say "Hey Claude", pause, and then talk within 10 seconds.
-- **Address a session:** "Hey Claude, *api*: what's failing?" Session names come from the project folder; rename one with `/interccom name <name>`.
-- **Stop it talking:** `/interccom stop`. Saying "Hey Claude, stop" works between sentences, not while audio is playing.
+- **Address a session:** "Hey Claude, *api*: what's failing?" A session is named after its title's first three words (`/rename Session #3` makes it `session-3`, said "session three"), or after its folder when it has no title. `/interccom name <name>` sets one directly.
+- **The bar above the prompt:** shows what it's doing (Talking, Listening, Processing, Waiting, Not connected, Mic off), with **Mic off/on**, and **Stop** while it talks. Use these mid-turn: Claude Code holds typed commands like `/interccom stop` and `/listen` until its turn ends.
+- **Chimes:** a rising one when it catches "Hey Claude", a falling one when your words reach a session.
+- **Stop it talking:** the **Stop** button, or `/interccom stop` when Claude isn't working. Saying "Hey Claude, stop" works between sentences, not while audio is playing.
 - **See all sessions:** `/interccom status`.
 - **Listening mode:** `/listen wake` (default), `/listen always` (everything you say is sent), `/listen off`.
+
+### Permission prompts by voice
+
+When a session asks for permission (to run a command, edit a file, use a tool), interccom says so: "api wants to run npm test. Approve?" Answer out loud, or in the dialog as usual: whichever comes first wins.
+
+- **Approve:** "approve", "yes, approve" or "allow". **Deny:** "deny", "no" or "don't allow". A bare "yes" counts only when exactly one request is open.
+- **Which one:** your answer goes to the newest request; name the session to pick another ("approve api", "web two, deny").
+- **Destructive or outward-facing** (deletes, pushes, publishing, deploys, sending messages): it reads the action back and waits for "confirm".
+- The answer has to be just that, with or without "Hey Claude"; "yes" or "no" inside a longer sentence never counts.
+- No answer within a minute: the dialog alone decides. Nothing is ever allowed silently.
+- **Never by voice:** tools your organization caps at "ask", calls another plugin put to you, and Claude's questions and plans for you. The coordinator never answers a permission prompt; it only sees that one is waiting.
+- Listening off, muted, or no mic: the dialog works as before, with no announcement.
 
 ### The coordinator
 
@@ -215,7 +229,6 @@ Set `INTERCCOM_MIC` to a device name to choose a specific microphone; otherwise 
 ## Roadmap
 
 - **More coding agents:** Gemini CLI and others hearing too, and a coordinator in agents other than Claude Code ([design](docs/superpowers/specs/2026-11-01-interccom-hosts.md)).
-- **Voice approvals:** approve or deny permission prompts by voice, with read-back and confirmation for anything destructive.
 - **Setup:** a `/interccom setup` guide and a mic picker.
 - **Claude Code desktop app and phone:** the PC goes quiet when you're on your phone.
 

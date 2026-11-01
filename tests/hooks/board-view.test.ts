@@ -39,3 +39,9 @@ test('boardText shows roles, questions, last lines and decisions', () => {
   assert.equal(lines[6], '- 1m ago: "Told api to continue."')
   assert.equal(boardText({ sessions: [] }, 0), 'No sessions are connected.')
 })
+
+test('boardText lists permission requests waiting for the person', () => {
+  const text = boardText({ sessions: [{ name: 'api', cwd: '/a', changedAt: 0 }], approvals: [{ name: 'api', summary: 'run npm test' }, { name: 'api', summary: 'run git push', confirming: true }] }, 0)
+  assert.match(text, /Permission requests waiting for the person/)
+  assert.match(text, /- api wants to run npm test\n- api wants to run git push \(asked to confirm\)/)
+})

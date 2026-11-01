@@ -789,3 +789,101 @@ test('relay reaches push sessions of other agents (Copilot, OpenCode) over their
   assert.deepEqual((await call('POST', '/board/relay', { sessionId: coord.sessionId, to: 'cp', quote: 'rerun the flaky test' })).json, { relayed: 'cp' })
   assert.deepEqual(await cs.line(1), { type: 'heard', text: 'rerun the flaky test' })
 })
+
+// --- Permission prompts by voice ---
+
+test('approvals: announced by the hub, settled by "approve", and the session sees it on its long-poll', async () => {
+  const audio = fakeAudio()
+  audio.chimes = []
+  audio.chime = n => audio.chimes.push(n)
+  const { hub, call, register, open } = await start({ audio })
+  const { sessionId } = await register('api')
+  const s = await open(sessionId)
+  const { json: req } = await call('POST', '/approvals', { sessionId, tool: 'Bash', input: { command: 'npm test' } })
+  assert.deepEqual(req, { id: req.id, summary: 'run npm test', destructive: false })
+  await waitFor(() => audio.played.length === 1)
+  assert.equal(audio.played[0], 'api wants to run npm test. Approve?')
+  assert.equal((await call('GET', `/approvals/${req.id}`)).json.status, 'open')
+  const waiting = call('GET', `/approvals/${req.id}?wait=5000`)
+  await tick()
+  await hub.hear('Approve.')
+  assert.equal((await waiting).json.status, 'approved')
+  assert.equal((await call('GET', `/approvals/${req.id}`)).json.status, 'approved', 'a poll that comes late still gets the answer')
+  assert.deepEqual(audio.chimes, ['sent'])
+  assert.equal(s.lines.length, 1, 'the answer never reaches the session as speech')
+})
+
+test('approvals: the long-poll returns the answer itself', async () => {
+  const { hub, call, register } = await start()
+  const { sessionId } = await register('api')
+  const { json: req } = await call('POST', '/approvals', { sessionId, tool: 'Edit', input: { file_path: '/x/a.mjs' } })
+  const waiting = call('GET', `/approvals/${req.id}?wait=5000`)
+  await tick()
+  await hub.hear('hey claude, deny')
+  assert.equal((await waiting).json.status, 'denied')
+})
+
+test('approvals: destructive requests are read back and need "confirm"; "yes" is not enough', async () => {
+  const audio = fakeAudio()
+  const { hub, call, register } = await start({ audio })
+  const { sessionId } = await register('api')
+  const { json: req } = await call('POST', '/approvals', { sessionId, tool: 'Bash', input: { command: 'git push --force' } })
+  assert.equal(req.destructive, true)
+  await hub.hear('approve')
+  assert.equal((await call('GET', `/approvals/${req.id}`)).json.status, 'confirming')
+  await waitFor(() => audio.played.length === 2)
+  assert.equal(audio.played[1], 'Confirm: api will run git push --force. Say confirm, or deny.')
+  await hub.hear('yes')
+  assert.equal((await call('GET', `/approvals/${req.id}`)).json.status, 'confirming')
+  const waiting = call('GET', `/approvals/${req.id}?wait=5000`)
+  await tick()
+  await hub.hear('confirm')
+  assert.equal((await waiting).json.status, 'approved')
+})
+
+test('approvals: named when several are open; ordinary speech still routes; cancelled when the dialog wins', async () => {
+  const { hub, call, register, open } = await start()
+  const a = await register('api')
+  const w = await register('web')
+  const sa = await open(a.sessionId)
+  await open(w.sessionId)
+  await call('POST', `/sessions/${a.sessionId}/active`)
+  const ra = (await call('POST', '/approvals', { sessionId: a.sessionId, tool: 'Bash', input: { command: 'npm test' } })).json
+  const rw = (await call('POST', '/approvals', { sessionId: w.sessionId, tool: 'Bash', input: { command: 'npm run build' } })).json
+  await hub.hear('yes') // two open: a bare yes means nothing, and isn't speech for a session either (no wake word)
+  assert.equal((await call('GET', `/approvals/${ra.id}`)).json.status, 'open')
+  await hub.hear('hey claude, what is left to do')
+  assert.deepEqual(await sa.line(1), { type: 'heard', text: 'what is left to do' })
+  const wa = call('GET', `/approvals/${ra.id}?wait=5000`)
+  await tick()
+  await hub.hear('approve api')
+  assert.equal((await wa).json.status, 'approved')
+  assert.equal((await call('GET', `/approvals/${rw.id}`)).json.status, 'open')
+  await call('DELETE', `/approvals/${rw.id}`)
+  assert.equal((await call('GET', `/approvals/${rw.id}`)).json.status, 'gone')
+  assert.deepEqual((await call('GET', '/board')).json.approvals, [])
+})
+
+test('approvals: the coordinator never gets the answer; a closed session cancels its requests', async () => {
+  const { hub, h, cs, ws, worker } = await (async () => {
+    const h = await start()
+    const coord = await h.register('boss')
+    const worker = await h.register('api')
+    const cs = await h.open(coord.sessionId)
+    const ws = await h.open(worker.sessionId)
+    await h.call('POST', `/sessions/${coord.sessionId}/role`, { role: 'coordinator' })
+    return { hub: h.hub, h, cs, ws, worker }
+  })()
+  const r = (await h.call('POST', '/approvals', { sessionId: worker.sessionId, tool: 'Bash', input: { command: 'npm test' } })).json
+  const before = cs.lines.length
+  const waiting = h.call('GET', `/approvals/${r.id}?wait=5000`)
+  await tick()
+  await hub.hear('approve')
+  assert.equal((await waiting).json.status, 'approved')
+  await tick()
+  assert.equal(cs.lines.filter(l => l.type === 'heard').length, cs.lines.slice(0, before).filter(l => l.type === 'heard').length)
+  const r2 = (await h.call('POST', '/approvals', { sessionId: worker.sessionId, tool: 'Bash', input: { command: 'ls' } })).json
+  await h.call('DELETE', `/sessions/${worker.sessionId}`)
+  assert.equal((await h.call('GET', `/approvals/${r2.id}`)).json.status, 'cancelled')
+  void ws
+})

@@ -2,8 +2,9 @@ import type { Register, EngineInterface, RenderElement } from 'claude-code'
 import { guidance, coordinatorGuidance, normalizeAutonomy } from './guidance.ts'
 import {
   startLink, hubCall, currentLink, setLinkName, reportBusy, delivery, voiceTag,
-  currentRole, requestRole, deliverReports, isTalking, isMicPaused, currentStatus,
+  currentRole, requestRole, deliverReports, isTalking, isMicPaused, isMicOn, currentStatus,
 } from './hub-link.ts'
+import { rememberCheck, takeEligible, askByVoice } from './approvals.ts'
 import { boardText, type BoardData } from './board-view.ts'
 import { baseName, isMuted } from './link-env.ts'
 
@@ -297,6 +298,26 @@ export const register: Register = (on, opts) => {
         key: 'mic', label: isMicPaused() ? 'Mic on' : 'Mic off',
         onPress: () => toggleMic($).catch(failed('switch the mic')),
       })) as RenderElement
+  }).catch(($, e, next) => next(e))
+
+  // Permission prompts by voice. tool.check only watches core's verdict and never changes it.
+  on('tool.check', async ($, e, next) => {
+    const verdict = await next(e)
+    rememberCheck(e, verdict)
+    return verdict
+  }).catch(($, e, next) => next(e))
+
+  on('classic.PermissionRequest', async ($, e, next) => {
+    const below = await next(e)
+    if (below.decision) return below // the person's own PermissionRequest hooks decided
+    const toolUseId = takeEligible(e.tool_name, e.tool_input)
+    const id = currentLink()?.sessionId
+    if (!toolUseId || !id || !isMicOn() || isMuted(options)) return below
+    const call = (method: string, path: string, body?: unknown) => hubCall($, method, path, body)
+    const answer = await askByVoice($, call, id, e.tool_name, e.tool_input, toolUseId, next.signal)
+    if (answer === 'approved') return { ...below, decision: { behavior: 'allow' as const } }
+    if (answer === 'denied') return { ...below, decision: { behavior: 'deny' as const, message: 'The person said no, by voice.' } }
+    return below
   }).catch(($, e, next) => next(e))
 
   on('command.run', { command: 'listen' }, async ($, e) => listenCommand($, e.args))

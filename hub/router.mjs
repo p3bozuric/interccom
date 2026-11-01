@@ -42,3 +42,10 @@ export function route(text, ctx) {
   if (hit) return { kind: 'deliver', text: hit.text, name: hit.name }
   return { kind: 'deliver', text: rest }
 }
+
+// The utterance without a leading "Hey Claude" (or as it was when there is none).
+export function withoutWake(text) {
+  const s = String(text ?? '')
+  const wake = WAKE.exec(s)
+  return (wake ? s.slice(wake[0].length) : s).trim()
+}

@@ -4,7 +4,8 @@ import http from 'node:http'
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import { Board, ROLES, publicRow } from './board.mjs'
 import { TalkQueue } from './queue.mjs'
-import { route } from './router.mjs'
+import { route, withoutWake } from './router.mjs'
+import { describeRequest, isDestructive, matchAnswer } from './approvals.mjs'
 import { toSpeakable } from './text.mjs'
 import { createPlayer } from './player.mjs'
 import { TTS_ENGINES, STT_ENGINES, KEY_FIELDS } from './engines/index.mjs'
@@ -26,6 +27,9 @@ const MAX_INBOX = 20
 const RECENT_MS = 15 * 60_000 // how long the coordinator may relay something the person said
 const MAX_RECENT = 50
 const HOST_EVENTS = new Set(['session-start', 'prompt', 'tool', 'stop'])
+const APPROVAL_WAIT_MAX_MS = 10_000 // one long-poll; the session asks again until its own timeout
+const APPROVAL_STALE_MS = 10 * 60_000 // a request whose session stopped asking is dropped
+const APPROVAL_KEEP_MS = 60_000 // an answer waits this long for the session's next poll
 
 // Words only, lower case: "Use port 8080!" and "use port 8080" are the same quote.
 export function normWords(s) {
@@ -101,6 +105,9 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
   let lastMicError = ''
   let idleTimer = null
   let armTimer = null
+  const approvals = new Map() // id -> { id, sessionId, name, summary, destructive, confirming, at, status, waiters }
+  const settled = new Map() // id -> { status, at }: answers the session hasn't picked up yet
+  let approvalSeq = 0
   const voice = { playing: false, speaking: false, transcribing: 0 }
   let lastCue = 'waiting'
   const tokenBuf = Buffer.from(String(token))
@@ -178,6 +185,7 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
 
   function removeSession(id) {
     clearGrace(id)
+    for (const a of approvals.values()) if (a.sessionId === id) settleApproval(a, 'cancelled')
     if (!board.get(id)) return
     board.remove(id)
     const res = streams.get(id)
@@ -199,7 +207,49 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
     return c && streams.has(c.sessionId) ? c : undefined
   }
 
+  // Spoken by the hub itself, never under a session's name: a request is the person's to answer.
+  function announce(text) {
+    const spoken = toSpeakable(text)
+    if (!spoken) return
+    queue.push({ sessionId: null, text: spoken, priority: 'question' })
+    player.kick()
+  }
+
+  function openApprovals() {
+    const t = now()
+    for (const a of approvals.values()) if (t - a.at > APPROVAL_STALE_MS) settleApproval(a, 'cancelled')
+    return [...approvals.values()].sort((x, y) => x.at - y.at)
+  }
+
+  function settleApproval(a, status) {
+    approvals.delete(a.id)
+    a.status = status
+    const t = now()
+    for (const [id, s] of settled) if (t - s.at > APPROVAL_KEEP_MS) settled.delete(id)
+    settled.set(a.id, { status, at: t })
+    for (const w of a.waiters.splice(0)) w()
+  }
+
+  // A permission answer from the person's voice. Never reaches the coordinator or a session.
+  function answerApproval(text) {
+    const open = openApprovals()
+    const m = matchAnswer(withoutWake(text), open.map(a => ({ id: a.id, name: a.name, confirming: a.confirming })))
+    if (!m) return false
+    const a = approvals.get(m.id)
+    if (m.action === 'deny') {
+      settleApproval(a, 'denied')
+    } else if (m.action === 'approve' && a.destructive && !a.confirming) {
+      a.confirming = true
+      announce(`Confirm: ${a.name} will ${a.summary}. Say confirm, or deny.`)
+    } else {
+      settleApproval(a, 'approved')
+    }
+    audio.chime?.('sent')
+    return true
+  }
+
   async function hear(text) {
+    if (approvals.size && answerApproval(text)) return
     const coord = liveCoordinator()
     const r = route(String(text ?? ''), {
       mode: config.listenMode,
@@ -393,6 +443,7 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
         playing: player.isPlaying(),
         coordinator: liveCoordinator()?.name ?? null,
         decisions: board.decisions(),
+        approvals: openApprovals().map(a => ({ name: a.name, summary: a.summary, confirming: a.confirming })),
       }
     }
     if (m === 'POST' && path === '/sessions') {
@@ -415,6 +466,40 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
       return { mode: config.listenMode }
     }
     if (m === 'POST' && path === '/stop') return { flushed: stop() }
+
+    // Permission prompts by voice: a session opens a request, waits on it in short long-polls
+    // while its own dialog stays up, and cancels it when the dialog was answered first.
+    if (m === 'POST' && path === '/approvals') {
+      const row = session(body.sessionId)
+      const tool = String(body.tool ?? '')
+      if (!tool) throw new HttpError(400, 'tool is required')
+      const a = {
+        id: String(++approvalSeq), sessionId: row.sessionId, name: row.name,
+        summary: describeRequest(tool, body.input), destructive: isDestructive(tool, body.input),
+        confirming: false, at: t, status: 'open', waiters: [],
+      }
+      approvals.set(a.id, a)
+      announce(`${a.name} wants to ${a.summary}. Approve?`)
+      return { id: a.id, summary: a.summary, destructive: a.destructive }
+    }
+    const am = /^\/approvals\/([^/]+)$/.exec(path)
+    if (am) {
+      const a = approvals.get(am[1])
+      if (m === 'DELETE') { if (a) settleApproval(a, 'cancelled'); settled.delete(am[1]); return {} }
+      if (m === 'GET') {
+        if (!a) return { status: settled.get(am[1])?.status ?? 'gone' }
+        const ms = Math.min(Math.max(Number(url.searchParams.get('wait')) || 0, 0), APPROVAL_WAIT_MAX_MS)
+        if (ms > 0) {
+          await new Promise(resolve => {
+            const timer = setTimeout(done, ms)
+            function done() { clearTimeout(timer); const i = a.waiters.indexOf(done); if (i >= 0) a.waiters.splice(i, 1); resolve() }
+            a.waiters.push(done)
+            req.on('close', done)
+          })
+        }
+        return { status: a.status === 'open' && a.confirming ? 'confirming' : a.status }
+      }
+    }
     if (m === 'POST' && path === '/host/event') return hostEvent(body, t)
     if (m === 'GET' && path === '/setup') {
       const machine = await checkMachine().catch(() => ({}))
