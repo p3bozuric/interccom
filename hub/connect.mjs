@@ -43,7 +43,9 @@ async function main() {
   } catch { /* stream ended */ }
 }
 
-main().then(() => process.exit(0), err => {
+// No process.exit on the normal end: on Windows, exiting while the broken stream's socket is
+// still closing can abort Node (0xC0000409). With the stream done nothing keeps it running.
+main().then(() => { process.exitCode = 0 }, err => {
   out({ type: 'error', message: String(err?.message ?? err) })
   process.exit(1)
 })
