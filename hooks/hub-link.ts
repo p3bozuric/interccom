@@ -131,6 +131,10 @@ export function isTalking(): boolean {
   return cue === 'talking'
 }
 
+export function isMicOn(): boolean {
+  return mic === 'on'
+}
+
 export function isMicPaused(): boolean {
   return mic === 'paused'
 }

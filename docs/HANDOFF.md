@@ -24,6 +24,18 @@ Then work through [docs/testing-locally.md](testing-locally.md) in order and rec
 | `ba750b2` | **GitHub Copilot CLI** (extension: `hub/hosts/copilot.mjs`, `interccom copilot-setup`) and **OpenCode** (plugin: `hub/hosts/opencode.mjs`, `interccom opencode-setup`). Fix: the hub launcher finds a real Node inside Bun or packaged CLIs (`resolveNode`, `INTERCCOM_NODE`). Deflaked the relaunch test. |
 | `338d27f` | **Cloud speech providers**: Deepgram, Soniox, OpenAI, Groq, Cartesia, next to ElevenLabs/local/command. **Setup flow**: required engine choice at plugin install, `/interccom setup [test]`, and `interccom setup` (wizard/flags) writing `~/.interccom/config.json` without keys. |
 
+## Since then, on the owner's PC (2026-11-01, local sessions)
+
+- Tested on Windows with a real mic and real sessions, using ElevenLabs and then local Kokoro + Speaches. Results are in [test-results/2026-11-01.md](test-results/2026-11-01.md).
+- Added:
+  - chimes and a one-word status;
+  - session names from session titles;
+  - a bar above the prompt with Mic on/off and Stop (Claude Code holds typed commands until the turn ends);
+  - a hint when the Speaches model is missing;
+  - a fix for the Windows exit crash.
+- Coordinator reports now go as the plugin's message, because the API has no `asUser: false`.
+- **0.5.0: permission prompts by voice** ([as built](superpowers/plans/2026-11-01-interccom-3-voice-approvals.md)). Whether the dialog and the voice wait really run side by side is still to check on a real machine (testing-locally.md 3b, 8.12).
+
 ## How it fits together
 
 ```
@@ -90,7 +102,6 @@ The full list is in testing-locally.md §8.
 - Saying "stop" doesn't interrupt audio while it plays: the mic is deaf during playback, by design.
 - Hooks-module types (`claude-code`) weren't available in the cloud, so the TypeScript in `hooks/` has never been type-checked. The validator accepts it.
 - Next on the roadmap:
-  - voice approvals of permission prompts (Plan 3);
   - Gemini CLI and other agents;
   - a coordinator in agents other than Claude Code;
   - a local wake-word/VAD model;
