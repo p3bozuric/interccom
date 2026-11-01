@@ -6,6 +6,8 @@ export function defaultReadRegistry(exec = execFileSync, name = 'ELEVENLABS_API_
     return exec('reg', ['query', 'HKCU\\Environment', '/v', name], {
       encoding: 'utf8',
       windowsHide: true,
+      // reg prints "unable to find the specified registry key" for every unset key; keep it quiet.
+      stdio: ['ignore', 'pipe', 'ignore'],
     });
   } catch {
     return '';
