@@ -1,0 +1,14 @@
+{
+  "name": "interccom-demo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "voices": "node tts.mjs",
+    "audio": "node build-audio.mjs",
+    "render": "node render.mjs",
+    "build": "node tts.mjs && node build-audio.mjs && node render.mjs"
+  },
+  "devDependencies": {
+    "playwright-core": "1.56.1"
+  }
+}

@@ -1,0 +1,7 @@
+node_modules/
+package-lock.json
+timeline.js
+envelope.js
+mix.wav
+audio/sent.wav
+*.mp4
