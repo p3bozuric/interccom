@@ -2,7 +2,7 @@ import type { Register, EngineInterface } from 'claude-code'
 import { guidance, coordinatorGuidance, normalizeAutonomy } from './guidance.ts'
 import {
   startLink, hubCall, currentLink, setLinkName, reportBusy, delivery, voiceTag,
-  currentRole, requestRole, deliverReports,
+  currentRole, requestRole, deliverReports, isTalking,
 } from './hub-link.ts'
 import { boardText, type BoardData } from './board-view.ts'
 import { baseName, isMuted } from './link-env.ts'
@@ -50,6 +50,12 @@ async function renameSession($: EngineInterface, wanted: string): Promise<string
   const name = String(out.name ?? wanted)
   setLinkName(name)
   return name
+}
+
+// Ends what is playing and drops queued updates (questions stay); how many were dropped.
+async function stopTalking($: EngineInterface): Promise<number> {
+  const out = (await hubCall($, 'POST', '/stop', {})) as { flushed?: unknown }
+  return Number(out.flushed ?? 0)
 }
 
 // A session title as a name: its first three words, the most a name said out loud can be.
@@ -109,8 +115,7 @@ async function interccomCommand($: EngineInterface, args: string): Promise<{ tex
     return { text: 'This session is a worker again.' }
   }
   if (sub.toLowerCase() === 'stop') {
-    const out = (await hubCall($, 'POST', '/stop', {})) as { flushed?: unknown }
-    return { text: `Stopped. Cleared ${Number(out.flushed ?? 0)} queued updates.` }
+    return { text: `Stopped. Cleared ${await stopTalking($)} queued updates.` }
   }
   return usage
 }
@@ -260,6 +265,19 @@ export const register: Register = (on, opts) => {
       await hubCall($, 'POST', `/sessions/${encodeURIComponent(id)}/active`, {}).catch(() => undefined)
     }
     return next(e)
+  }).catch(($, e, next) => next(e))
+
+  // While it talks, a Stop button above the prompt. The desktop app holds typed commands, even
+  // /interccom stop, until Claude's turn ends; a press reaches the plugin at once.
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    if (e.props.hasSurvey || !isTalking()) return next(e)
+    const { Box, Button, Text } = $.ui.resolve(e)
+    return h(Box, null,
+      h(Text, { dimColor: true }, 'interccom is talking '),
+      h(Button, {
+        key: 'stop', label: 'Stop', variant: 'primary',
+        onPress: () => stopTalking($).catch(err => $.ui.toast(`interccom: couldn't stop (${errorText(err).slice(0, 120)})`)),
+      }))
   }).catch(($, e, next) => next(e))
 
   on('command.run', { command: 'listen' }, async ($, e) => listenCommand($, e.args))
