@@ -156,6 +156,8 @@ The servers and images below are examples. Image names and tags change, so check
 docker run -d --name kokoro -p 8880:8880 ghcr.io/remsky/kokoro-fastapi-cpu:latest
 # STT: Speaches (faster-whisper; default port 8000)
 docker run -d --name speaches -p 8000:8000 ghcr.io/speaches-ai/speaches:latest-cpu
+# Speaches downloads models only when asked (once; about 15 s for small):
+curl.exe -X POST http://127.0.0.1:8000/v1/models/Systran/faster-whisper-small
 ```
 
 Settings: `tts_engine = local`, `stt_engine = local`. The URLs and the models `kokoro` (voice `af_heart`) and `Systran/faster-whisper-small` are the defaults; `tts_voice`, `tts_model` and `stt_model` override them. Some servers download the model on the first request, which can take a minute.

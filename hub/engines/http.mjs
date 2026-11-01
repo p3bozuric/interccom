@@ -17,7 +17,15 @@ export async function providerFetch(url, init, { label, keySetting, fetch: fetch
     throw new EngineError('auth', `${label} rejected the API key (${res.status}). Check ${keySetting}.`)
   }
   if (res.status === 402 || res.status === 429) throw new EngineError('quota', `${label} quota or rate limit reached (${res.status}). Check your plan's usage.`)
-  if (res.status === 404) throw new EngineError('config', `${label} has no ${new URL(url).pathname} (404). Check the URL and model name.`)
+  if (res.status === 404) {
+    // Speaches answers 404 for a model it hasn't downloaded yet; the path is fine then.
+    const model = /Model '([^']+)' is not installed/i.exec(body)?.[1]
+    if (model) {
+      const models = url.replace(/\/audio\/[^/]+$/, '/models')
+      throw new EngineError('config', `${label} hasn't downloaded the model ${model} yet. Download it once: curl -X POST ${models}/${model}`)
+    }
+    throw new EngineError('config', `${label} has no ${new URL(url).pathname} (404). Check the URL and model name.`)
+  }
   throw new EngineError('other', `${label} error ${res.status}: ${body}`)
 }
 
