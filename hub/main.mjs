@@ -1,6 +1,6 @@
 // Hub entry point: node hub/main.mjs [--state-dir <dir>]
 // Writes <stateDir>/hub.json { port, token, pid } once listening.
-// The API key arrives only via POST /config from sessions.
+// The API key arrives only via POST /config from sessions. Speech engines: hub/engines/index.mjs.
 import { spawn } from 'node:child_process'
 import { randomBytes, randomUUID } from 'node:crypto'
 import { appendFileSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
@@ -9,7 +9,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { parseArgs } from 'node:util'
 import { createHub } from './server.mjs'
-import { tts, stt, EngineError } from './engines/elevenlabs.mjs'
+import { createEngines, audioExt } from './engines/index.mjs'
 import { playArgv, playOutcome, listMics } from './audio/windows.mjs'
 import { createListenerManager } from './listener.mjs'
 import { createVad } from './vad.mjs'
@@ -28,26 +28,16 @@ mkdirSync(stateDir, { recursive: true })
 process.chdir(stateDir)
 if (process.env.INTERCCOM_TEST_LOG) appendFileSync(process.env.INTERCCOM_TEST_LOG, `${process.pid}\n`)
 
-const NO_KEY = 'No ElevenLabs API key configured. Set it in /plugin settings for interccom or in ELEVENLABS_API_KEY.'
-
-const engines = {
-  tts(text, cfg) {
-    if (!cfg.apiKey) throw new EngineError('auth', NO_KEY)
-    return tts(text, { apiKey: cfg.apiKey, voiceId: cfg.voiceId, modelId: cfg.ttsModel })
-  },
-  stt(wav, cfg) {
-    if (!cfg.apiKey) throw new EngineError('auth', NO_KEY)
-    return stt(wav, { apiKey: cfg.apiKey, model: cfg.sttModel, language: cfg.sttLanguage })
-  },
-}
+// Command engines run with the state dir as cwd, for the same reason as ffplay below.
+const engines = createEngines({ cwd: stateDir })
 
 const audio = {
-  async play(mp3, signal) {
+  async play(audioBuf, signal) {
     if (signal.aborted) return
     const dir = path.join(os.tmpdir(), 'interccom')
     await mkdir(dir, { recursive: true })
-    const file = path.join(dir, `${randomUUID()}.mp3`)
-    await writeFile(file, mp3)
+    const file = path.join(dir, `${randomUUID()}.${audioExt(audioBuf)}`)
+    await writeFile(file, audioBuf)
     try {
       // A /stop may have landed while we were writing the file.
       if (signal.aborted) return
@@ -92,7 +82,7 @@ async function shutdown() {
 }
 
 const hub = createHub({ token, engines, audio, onIdleExit: shutdown })
-const listener = createListenerManager({ hub, listMics, stt, pcmToWav, createVad })
+const listener = createListenerManager({ hub, listMics, stt: engines.stt, sttReady: engines.sttReady, pcmToWav, createVad })
 listener.start() // follows /config and /listen changes from here on
 const { port } = await hub.listen(0)
 // Atomic write: readers never see a half-written hub.json.

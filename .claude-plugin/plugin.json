@@ -7,7 +7,7 @@
     "elevenlabs_api_key": {
       "type": "string",
       "title": "ElevenLabs API key",
-      "description": "Your ElevenLabs API key. Falls back to the ELEVENLABS_API_KEY environment variable.",
+      "description": "Your ElevenLabs API key, needed only for the elevenlabs engines. Falls back to the ELEVENLABS_API_KEY environment variable.",
       "sensitive": true
     },
     "voice_id": {
@@ -49,6 +49,70 @@
       "title": "Muted",
       "description": "Keep the speak tool but play nothing.",
       "default": false
+    },
+    "tts_engine": {
+      "type": "string",
+      "title": "Speech engine (talking)",
+      "description": "elevenlabs: cloud. local: an OpenAI-compatible speech server you run (Kokoro-FastAPI, Speaches, LocalAI). command: a program such as Piper.",
+      "default": "elevenlabs",
+      "options": [
+        "elevenlabs",
+        "local",
+        "command"
+      ]
+    },
+    "stt_engine": {
+      "type": "string",
+      "title": "Speech engine (listening)",
+      "description": "elevenlabs: cloud (Scribe). local: an OpenAI-compatible transcription server you run (Speaches/faster-whisper, whisper.cpp server, LocalAI). command: a program such as whisper-cli.",
+      "default": "elevenlabs",
+      "options": [
+        "elevenlabs",
+        "local",
+        "command"
+      ]
+    },
+    "local_tts_url": {
+      "type": "string",
+      "title": "Local TTS server URL",
+      "description": "Base URL of the OpenAI-compatible server, ending in /v1.",
+      "default": "http://127.0.0.1:8880/v1"
+    },
+    "local_tts_model": {
+      "type": "string",
+      "title": "Local TTS model",
+      "description": "Model name the local server expects.",
+      "default": "kokoro"
+    },
+    "local_tts_voice": {
+      "type": "string",
+      "title": "Local TTS voice",
+      "description": "Voice name the local server expects.",
+      "default": "af_heart"
+    },
+    "local_stt_url": {
+      "type": "string",
+      "title": "Local STT server URL",
+      "description": "Base URL of the OpenAI-compatible server, ending in /v1.",
+      "default": "http://127.0.0.1:8000/v1"
+    },
+    "local_stt_model": {
+      "type": "string",
+      "title": "Local STT model",
+      "description": "Model name the local server expects.",
+      "default": "Systran/faster-whisper-small"
+    },
+    "tts_command": {
+      "type": "string",
+      "title": "TTS command",
+      "description": "For tts_engine command. Text arrives on stdin; write audio to {out}. Example: piper --model C:\\voices\\en_US-amy-medium.onnx --output_file {out}",
+      "default": ""
+    },
+    "stt_command": {
+      "type": "string",
+      "title": "STT command",
+      "description": "For stt_engine command. {in} is a 16 kHz WAV; print the transcript. Example: whisper-cli -m C:\\models\\ggml-base.en.bin -f {in} -nt -np",
+      "default": ""
     },
     "autonomy": {
       "type": "string",

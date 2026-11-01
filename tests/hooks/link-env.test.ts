@@ -41,3 +41,31 @@ test('baseName handles slashes, backslashes and trailing separators', () => {
   assert.equal(baseName(''), 'session')
   assert.equal(baseName('/'), 'session')
 })
+
+test('linkEnv passes the local engine settings through', () => {
+  const env = linkEnv({
+    tts_engine: 'local', stt_engine: 'command', local_tts_url: 'http://127.0.0.1:8880/v1', local_tts_model: 'kokoro',
+    local_tts_voice: 'af_heart', local_stt_url: 'http://127.0.0.1:8000/v1', local_stt_model: 'w',
+    tts_command: 'piper --output_file {out}', stt_command: ' whisper-cli -f {in} ',
+  })
+  assert.equal(env.INTERCCOM_TTS_ENGINE, 'local')
+  assert.equal(env.INTERCCOM_STT_ENGINE, 'command')
+  assert.equal(env.INTERCCOM_LOCAL_TTS_URL, 'http://127.0.0.1:8880/v1')
+  assert.equal(env.INTERCCOM_LOCAL_TTS_MODEL, 'kokoro')
+  assert.equal(env.INTERCCOM_LOCAL_TTS_VOICE, 'af_heart')
+  assert.equal(env.INTERCCOM_LOCAL_STT_URL, 'http://127.0.0.1:8000/v1')
+  assert.equal(env.INTERCCOM_LOCAL_STT_MODEL, 'w')
+  assert.equal(env.INTERCCOM_TTS_COMMAND, 'piper --output_file {out}')
+  assert.equal(env.INTERCCOM_STT_COMMAND, 'whisper-cli -f {in}')
+})
+
+test('every hub-facing setting in plugin.json reaches the hub env', async () => {
+  const { readFileSync } = await import('node:fs')
+  const manifest = JSON.parse(readFileSync(new URL('../../.claude-plugin/plugin.json', import.meta.url), 'utf8'))
+  const sessionOnly = new Set(['autonomy', 'autonomy_rules'])
+  for (const key of Object.keys(manifest.userConfig)) {
+    if (sessionOnly.has(key)) continue
+    const env = linkEnv({ [key]: key === 'muted' ? true : 'x' })
+    assert.ok(Object.keys(env).length > 1 || key === 'muted', `${key} is not passed to the hub`)
+  }
+})

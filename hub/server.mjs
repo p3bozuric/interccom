@@ -7,12 +7,17 @@ import { TalkQueue } from './queue.mjs'
 import { route } from './router.mjs'
 import { toSpeakable } from './text.mjs'
 import { createPlayer } from './player.mjs'
+import { ENGINES } from './engines/index.mjs'
 
 export { createPlayer }
 
 const PRIORITIES = new Set(['question', 'heads-up', 'status'])
 const MODES = new Set(['wake', 'always', 'off'])
-const CONFIG_FIELDS = ['apiKey', 'voiceId', 'ttsModel', 'sttLanguage', 'listenMode', 'muted']
+const CONFIG_FIELDS = [
+  'apiKey', 'voiceId', 'ttsModel', 'sttLanguage', 'listenMode', 'muted',
+  'ttsEngine', 'sttEngine', 'localTtsUrl', 'localTtsModel', 'localTtsVoice', 'localSttUrl', 'localSttModel',
+  'ttsCommand', 'sttCommand',
+]
 const ERROR_WINDOW_MS = 60_000
 const MAX_BODY = 1 << 20
 const NONCE = /^[0-9a-f]{1,128}$/i
@@ -56,6 +61,16 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
     sttLanguage: 'en',
     listenMode: 'wake',
     muted: false,
+    ttsEngine: 'elevenlabs',
+    sttEngine: 'elevenlabs',
+    // Kokoro-FastAPI's and Speaches' default ports.
+    localTtsUrl: 'http://127.0.0.1:8880/v1',
+    localTtsModel: 'kokoro',
+    localTtsVoice: 'af_heart',
+    localSttUrl: 'http://127.0.0.1:8000/v1',
+    localSttModel: 'Systran/faster-whisper-small',
+    ttsCommand: '',
+    sttCommand: '',
   }
   let listenSticky = false
   const configListeners = []
@@ -179,6 +194,7 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
       if (k === 'listenMode') {
         if (listenSticky || !MODES.has(v)) continue
       }
+      if ((k === 'ttsEngine' || k === 'sttEngine') && !ENGINES.has(v)) continue
       config[k] = String(v)
     }
   }

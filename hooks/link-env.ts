@@ -18,6 +18,15 @@ export function linkEnv(opts: Record<string, unknown>): Record<string, string> {
     ['tts_model', 'INTERCCOM_TTS_MODEL'],
     ['stt_language', 'INTERCCOM_STT_LANGUAGE'],
     ['listen_mode', 'INTERCCOM_LISTEN_MODE'],
+    ['tts_engine', 'INTERCCOM_TTS_ENGINE'],
+    ['stt_engine', 'INTERCCOM_STT_ENGINE'],
+    ['local_tts_url', 'INTERCCOM_LOCAL_TTS_URL'],
+    ['local_tts_model', 'INTERCCOM_LOCAL_TTS_MODEL'],
+    ['local_tts_voice', 'INTERCCOM_LOCAL_TTS_VOICE'],
+    ['local_stt_url', 'INTERCCOM_LOCAL_STT_URL'],
+    ['local_stt_model', 'INTERCCOM_LOCAL_STT_MODEL'],
+    ['tts_command', 'INTERCCOM_TTS_COMMAND'],
+    ['stt_command', 'INTERCCOM_STT_COMMAND'],
   ]
   for (const [opt, name] of pairs) {
     const v = opts[opt]

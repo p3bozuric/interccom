@@ -93,10 +93,11 @@ export function startListener({
 }
 
 // Owns the listener's lifecycle. It runs only when listenMode is not 'off',
-// an API key is configured and a mic is found. Call start() once to subscribe
+// the speech-to-text engine is usable (e.g. an API key is set) and a mic is found. Call start() once to subscribe
 // to config changes; sync() re-evaluates immediately.
 export function createListenerManager({
   hub, env = process.env, listMics, startListener: start = startListener, stt, pcmToWav, createVad,
+  sttReady = cfg => Boolean(cfg.apiKey),
 }) {
   let running = null // { stop }
   let closed = false
@@ -107,7 +108,7 @@ export function createListenerManager({
 
   async function transcribe(pcm) {
     const cfg = hub.getConfig()
-    const text = await stt(pcmToWav(pcm, 16000), { apiKey: cfg.apiKey, model: cfg.sttModel, language: cfg.sttLanguage })
+    const text = await stt(pcmToWav(pcm, 16000), cfg)
     return String(text ?? '').trim()
   }
 
@@ -139,7 +140,7 @@ export function createListenerManager({
   function sync() {
     if (closed) return
     const cfg = hub.getConfig()
-    const want = cfg.listenMode !== 'off' && Boolean(cfg.apiKey)
+    const want = cfg.listenMode !== 'off' && sttReady(cfg)
     if (!want) {
       if (running) {
         halt()

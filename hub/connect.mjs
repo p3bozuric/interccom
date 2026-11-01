@@ -35,6 +35,13 @@ async function main() {
   if (env.INTERCCOM_TTS_MODEL) config.ttsModel = env.INTERCCOM_TTS_MODEL
   if (env.INTERCCOM_STT_LANGUAGE) config.sttLanguage = env.INTERCCOM_STT_LANGUAGE
   if (env.INTERCCOM_LISTEN_MODE) config.listenMode = env.INTERCCOM_LISTEN_MODE
+  const passthrough = {
+    INTERCCOM_TTS_ENGINE: 'ttsEngine', INTERCCOM_STT_ENGINE: 'sttEngine',
+    INTERCCOM_LOCAL_TTS_URL: 'localTtsUrl', INTERCCOM_LOCAL_TTS_MODEL: 'localTtsModel', INTERCCOM_LOCAL_TTS_VOICE: 'localTtsVoice',
+    INTERCCOM_LOCAL_STT_URL: 'localSttUrl', INTERCCOM_LOCAL_STT_MODEL: 'localSttModel',
+    INTERCCOM_TTS_COMMAND: 'ttsCommand', INTERCCOM_STT_COMMAND: 'sttCommand',
+  }
+  for (const [name, field] of Object.entries(passthrough)) if (env[name]) config[field] = env[name]
   if (env.INTERCCOM_MUTED === 'true' || env.INTERCCOM_MUTED === 'false') config.muted = env.INTERCCOM_MUTED === 'true'
   await post('/config', config)
 

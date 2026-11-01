@@ -284,7 +284,7 @@ test('utterance goes through STT with hub config, then hub.hear', async () => {
   await flush()
   assert.equal(sttCalls.length, 1)
   assert.equal(sttCalls[0].wav.toString(), 'WAVpcm')
-  assert.deepEqual(sttCalls[0].c, { apiKey: 'k', model: 'scribe_v1', language: 'en' })
+  assert.deepEqual(sttCalls[0].c, hub.getConfig())
   assert.deepEqual(hub.heard, ['hello there'])
 })
 

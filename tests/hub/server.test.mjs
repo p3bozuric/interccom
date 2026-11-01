@@ -584,3 +584,14 @@ test('a coordinator without an open stream does not swallow speech', async () =>
   await waitFor(() => audio.played.length === 1)
   assert.deepEqual(audio.played, ['api: Plays anyway.'])
 })
+
+test('config: engine settings merge; an unknown engine name is ignored', async () => {
+  const { hub, call } = await start()
+  assert.equal(hub.getConfig().ttsEngine, 'elevenlabs')
+  await call('POST', '/config', { ttsEngine: 'local', sttEngine: 'whisperish', sttCommand: 'whisper-cli -f {in}', localTtsVoice: 'bf_emma' })
+  const c = hub.getConfig()
+  assert.equal(c.ttsEngine, 'local')
+  assert.equal(c.sttEngine, 'elevenlabs')
+  assert.equal(c.sttCommand, 'whisper-cli -f {in}')
+  assert.equal(c.localTtsVoice, 'bf_emma')
+})
