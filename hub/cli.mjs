@@ -4,6 +4,8 @@
 //   interccom mcp [--host codex] [--name <n>] [--cwd <dir>]   MCP server for any agent
 //   interccom codex-hook                                      Codex command hook (stdin JSON)
 //   interccom codex-setup                                     print manual Codex config
+//   interccom gemini-hook                                     Gemini CLI command hook (stdin JSON)
+//   interccom gemini-setup [--print|--remove]                 write the Gemini CLI extension
 //   interccom copilot-setup [--print|--remove]                install the Copilot CLI extension
 //   interccom opencode-setup [--print|--remove]               install the OpenCode plugin
 //   interccom --version
@@ -18,9 +20,11 @@ const USAGE = `interccom ${pkg.version}: one voice for all your coding agents.
 
 Usage:
   interccom setup [--tts <engine>] [--stt <engine>] [--voice <v>] [--show] [--test]
-  interccom mcp [--host codex] [--name <name>] [--cwd <dir>]
+  interccom mcp [--host codex|gemini] [--name <name>] [--cwd <dir>]
   interccom codex-hook
   interccom codex-setup
+  interccom gemini-hook
+  interccom gemini-setup [--print | --remove]
   interccom copilot-setup [--print | --remove]
   interccom opencode-setup [--print | --remove]
   interccom --version`
@@ -53,6 +57,38 @@ ${JSON.stringify(hooks, null, 2)}
 `
 }
 
+// Writes (or removes) the Gemini CLI extension in ~/.interccom/gemini/interccom; Gemini loads it
+// with `gemini extensions link`, so an update of interccom needs no new setup.
+export async function geminiSetup({ print = false, remove = false, env = process.env, node = process.execPath, cli = cliPath, fs } = {}) {
+  const { geminiExtensionDir, geminiExtensionFiles } = await import('./hosts/gemini.mjs')
+  const nodeFs = fs ?? await import('node:fs')
+  const path = await import('node:path')
+  const dir = geminiExtensionDir(env)
+  const files = geminiExtensionFiles(node, cli, pkg.version)
+  if (print) return Object.entries(files).map(([f, c]) => `# ${path.join(dir, f)}\n${c}`).join('\n')
+  const manifest = path.join(dir, 'gemini-extension.json')
+  if (nodeFs.existsSync(manifest)) {
+    let name
+    try { name = JSON.parse(nodeFs.readFileSync(manifest, 'utf8')).name } catch { /* unreadable */ }
+    if (name !== 'interccom') throw new Error(`${manifest} exists and isn't interccom's; leaving it alone.`)
+  }
+  if (remove) {
+    nodeFs.rmSync(dir, { recursive: true, force: true })
+    return `Removed ${dir}. Also run: gemini extensions uninstall interccom`
+  }
+  for (const [f, c] of Object.entries(files)) {
+    nodeFs.mkdirSync(path.dirname(path.join(dir, f)), { recursive: true })
+    nodeFs.writeFileSync(path.join(dir, f), c)
+  }
+  return [
+    `Wrote the Gemini CLI extension to ${dir}.`,
+    'Load it once (in a terminal, not inside Gemini):',
+    `  gemini extensions link "${dir}"`,
+    'Then restart Gemini. Settings: INTERCCOM_* environment variables, set before starting gemini.',
+    "Gemini can't be started from outside, so speech while it's idle goes in with your next message there.",
+  ].join('\n')
+}
+
 async function main(argv) {
   const [cmd, ...rest] = argv
   if (cmd === '--version' || cmd === '-v') { console.log(pkg.version); return }
@@ -73,6 +109,16 @@ async function main(argv) {
     return
   }
   if (cmd === 'codex-setup') { process.stdout.write(codexSetupText()); return }
+  if (cmd === 'gemini-hook') {
+    const { runHostHook } = await import('./codex-hook.mjs')
+    await runHostHook('gemini')
+    return
+  }
+  if (cmd === 'gemini-setup') {
+    const { values } = parseArgs({ args: rest, options: { print: { type: 'boolean' }, remove: { type: 'boolean' } } })
+    console.log(await geminiSetup({ print: values.print, remove: values.remove }))
+    return
+  }
   if (cmd === 'copilot-setup' || cmd === 'opencode-setup') {
     const { values } = parseArgs({ args: rest, options: { print: { type: 'boolean' }, remove: { type: 'boolean' } } })
     const setup = await import('./hosts/setup.mjs')
