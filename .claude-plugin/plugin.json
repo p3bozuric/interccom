@@ -1,37 +1,38 @@
 {
   "name": "interccom",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "One voice for all your Claude Code sessions: hear conclusions and questions, talk back hands-free.",
   "license": "MIT",
   "userConfig": {
-    "elevenlabs_api_key": {
+    "tts_engine": {
       "type": "string",
-      "title": "ElevenLabs API key",
-      "description": "Your ElevenLabs API key, needed only for the elevenlabs engines. Falls back to the ELEVENLABS_API_KEY environment variable.",
-      "sensitive": true
-    },
-    "voice_id": {
-      "type": "string",
-      "title": "ElevenLabs voice ID",
-      "description": "Which voice speaks.",
-      "default": "21m00Tcm4TlvDq8ikWAM"
-    },
-    "tts_model": {
-      "type": "string",
-      "title": "ElevenLabs model",
-      "description": "TTS model; flash is the lowest latency.",
-      "default": "eleven_flash_v2_5",
+      "title": "Talking: speech engine",
+      "description": "Who turns Claude's words into speech. Cloud: elevenlabs, deepgram, soniox, openai, cartesia. On your machine: local (a server with the OpenAI audio API, e.g. Kokoro-FastAPI) or command (a program, e.g. Piper).",
       "options": [
-        "eleven_flash_v2_5",
-        "eleven_turbo_v2_5",
-        "eleven_multilingual_v2"
-      ]
+        "elevenlabs",
+        "deepgram",
+        "soniox",
+        "openai",
+        "cartesia",
+        "local",
+        "command"
+      ],
+      "required": true
     },
-    "stt_language": {
+    "stt_engine": {
       "type": "string",
-      "title": "Speech language",
-      "description": "Language code for transcription (en, hr, ...), or auto to detect.",
-      "default": "en"
+      "title": "Listening: speech engine",
+      "description": "Who transcribes what you say. Cloud: elevenlabs, deepgram, soniox, openai, groq. On your machine: local (a server with the OpenAI audio API, e.g. Speaches/faster-whisper or whisper.cpp) or command (a program, e.g. whisper-cli).",
+      "options": [
+        "elevenlabs",
+        "deepgram",
+        "soniox",
+        "openai",
+        "groq",
+        "local",
+        "command"
+      ],
+      "required": true
     },
     "listen_mode": {
       "type": "string",
@@ -44,63 +45,77 @@
         "off"
       ]
     },
-    "muted": {
-      "type": "boolean",
-      "title": "Muted",
-      "description": "Keep the speak tool but play nothing.",
-      "default": false
-    },
-    "tts_engine": {
+    "elevenlabs_api_key": {
       "type": "string",
-      "title": "Speech engine (talking)",
-      "description": "elevenlabs: cloud. local: an OpenAI-compatible speech server you run (Kokoro-FastAPI, Speaches, LocalAI). command: a program such as Piper.",
-      "default": "elevenlabs",
-      "options": [
-        "elevenlabs",
-        "local",
-        "command"
-      ]
+      "title": "ElevenLabs API key",
+      "description": "Needed only when ElevenLabs is chosen. The key needs both Text to Speech and Speech to Text. Falls back to ELEVENLABS_API_KEY.",
+      "sensitive": true
     },
-    "stt_engine": {
+    "deepgram_api_key": {
       "type": "string",
-      "title": "Speech engine (listening)",
-      "description": "elevenlabs: cloud (Scribe). local: an OpenAI-compatible transcription server you run (Speaches/faster-whisper, whisper.cpp server, LocalAI). command: a program such as whisper-cli.",
-      "default": "elevenlabs",
-      "options": [
-        "elevenlabs",
-        "local",
-        "command"
-      ]
+      "title": "Deepgram API key",
+      "description": "Needed only when Deepgram is chosen for talking or listening. Falls back to DEEPGRAM_API_KEY. Get one at console.deepgram.com.",
+      "sensitive": true
+    },
+    "soniox_api_key": {
+      "type": "string",
+      "title": "Soniox API key",
+      "description": "Needed only when Soniox is chosen for talking or listening. Falls back to SONIOX_API_KEY. Get one at console.soniox.com.",
+      "sensitive": true
+    },
+    "openai_api_key": {
+      "type": "string",
+      "title": "OpenAI API key",
+      "description": "Needed only when OpenAI is chosen for talking or listening. Falls back to OPENAI_API_KEY. Get one at platform.openai.com.",
+      "sensitive": true
+    },
+    "groq_api_key": {
+      "type": "string",
+      "title": "Groq API key",
+      "description": "Needed only when Groq is chosen for talking or listening. Falls back to GROQ_API_KEY. Get one at console.groq.com.",
+      "sensitive": true
+    },
+    "cartesia_api_key": {
+      "type": "string",
+      "title": "Cartesia API key",
+      "description": "Needed only when Cartesia is chosen for talking or listening. Falls back to CARTESIA_API_KEY. Get one at play.cartesia.ai.",
+      "sensitive": true
+    },
+    "tts_voice": {
+      "type": "string",
+      "title": "Voice",
+      "description": "A voice of the chosen talking engine (ElevenLabs voice ID, Soniox voice name, OpenAI voice, Cartesia voice ID, local server voice). Deepgram picks the voice with the model, e.g. aura-2-thalia-en. Blank: the engine's default.",
+      "default": ""
+    },
+    "tts_model": {
+      "type": "string",
+      "title": "Talking model",
+      "description": "A model of the chosen talking engine, e.g. eleven_flash_v2_5, aura-2-thalia-en, tts-rt-v2, gpt-4o-mini-tts, sonic-3, kokoro. Blank: the engine's default.",
+      "default": ""
+    },
+    "stt_model": {
+      "type": "string",
+      "title": "Listening model",
+      "description": "A model of the chosen listening engine, e.g. scribe_v1, nova-3, stt-async-v5, gpt-4o-mini-transcribe, whisper-large-v3-turbo, Systran/faster-whisper-small. Blank: the engine's default.",
+      "default": ""
+    },
+    "stt_language": {
+      "type": "string",
+      "title": "Speech language",
+      "description": "Language code for transcription (en, hr, ...), or auto to detect.",
+      "default": "en"
     },
     "local_tts_url": {
       "type": "string",
       "title": "Local TTS server URL",
-      "description": "Base URL of the OpenAI-compatible server, ending in /v1.",
+      "description": "For tts_engine local: base URL of your OpenAI-compatible speech server, ending in /v1 (Kokoro-FastAPI: http://127.0.0.1:8880/v1).",
       "default": "http://127.0.0.1:8880/v1"
-    },
-    "local_tts_model": {
-      "type": "string",
-      "title": "Local TTS model",
-      "description": "Model name the local server expects.",
-      "default": "kokoro"
-    },
-    "local_tts_voice": {
-      "type": "string",
-      "title": "Local TTS voice",
-      "description": "Voice name the local server expects.",
-      "default": "af_heart"
     },
     "local_stt_url": {
       "type": "string",
       "title": "Local STT server URL",
-      "description": "Base URL of the OpenAI-compatible server, ending in /v1.",
+      "description": "For stt_engine local: base URL of your OpenAI-compatible transcription server, ending in /v1 (Speaches: http://127.0.0.1:8000/v1).",
       "default": "http://127.0.0.1:8000/v1"
-    },
-    "local_stt_model": {
-      "type": "string",
-      "title": "Local STT model",
-      "description": "Model name the local server expects.",
-      "default": "Systran/faster-whisper-small"
     },
     "tts_command": {
       "type": "string",
@@ -113,6 +128,12 @@
       "title": "STT command",
       "description": "For stt_engine command. {in} is a 16 kHz WAV; print the transcript. Example: whisper-cli -m C:\\models\\ggml-base.en.bin -f {in} -nt -np",
       "default": ""
+    },
+    "muted": {
+      "type": "boolean",
+      "title": "Muted",
+      "description": "Keep the speak tool but play nothing.",
+      "default": false
     },
     "autonomy": {
       "type": "string",

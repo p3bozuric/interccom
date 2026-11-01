@@ -164,7 +164,7 @@ export function createListenerManager({
       onUtterance,
       onError: msg => hub.reportError(msg),
     })
-    hub.broadcast({ type: 'mic', state: 'listening' })
+    hub.broadcast({ type: 'mic', state: 'listening', name: mic })
   }
 
   return {

@@ -225,7 +225,7 @@ test('manager starts on the first mic when mode is on and a key exists', () => {
   m.sync()
   assert.equal(started.length, 1)
   assert.equal(started[0].mic, 'Mic A')
-  assert.deepEqual(hub.broadcasts, [{ type: 'mic', state: 'listening' }])
+  assert.deepEqual(hub.broadcasts, [{ type: 'mic', state: 'listening', name: 'Mic A' }])
   m.sync()
   assert.equal(started.length, 1)
 })

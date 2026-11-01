@@ -42,7 +42,7 @@ async function listenCommand($: EngineInterface, args: string): Promise<{ text: 
 }
 
 async function interccomCommand($: EngineInterface, args: string): Promise<{ text: string }> {
-  const usage = { text: 'Usage: /interccom name <name> | status | stop | coordinator [take] | worker' }
+  const usage = { text: 'Usage: /interccom setup [test] | name <name> | status | stop | coordinator [take] | worker' }
   const trimmed = args.trim()
   const [sub = '', ...rest] = trimmed.split(/\s+/)
   if (sub.toLowerCase() === 'name') {
@@ -54,6 +54,16 @@ async function interccomCommand($: EngineInterface, args: string): Promise<{ tex
     const name = String(out.name ?? wanted)
     setLinkName(name)
     return { text: `This session is now called ${name}.` }
+  }
+  if (sub.toLowerCase() === 'setup') {
+    if ((rest[0] ?? '').toLowerCase() === 'test') {
+      const id = currentLink()?.sessionId
+      if (!id) return { text: 'interccom is not connected to the hub yet; try again in a moment.' }
+      await hubCall($, 'POST', '/setup/test', { sessionId: id })
+      return { text: 'Playing a test line. Then say "Hey Claude, testing" to check listening.' }
+    }
+    const report = (await hubCall($, 'GET', '/setup')) as { text?: unknown }
+    return { text: String(report.text ?? '') }
   }
   if (sub.toLowerCase() === 'status') {
     const board = (await hubCall($, 'GET', '/board')) as BoardData
@@ -154,8 +164,8 @@ export const register: Register = (on, opts) => {
     })
     await $.command.register({
       name: 'interccom',
-      description: 'interccom: rename this session, list every session, stop playback, or make this session the coordinator.',
-      argumentHint: 'name <name> | status | stop | coordinator [take] | worker',
+      description: 'interccom: check the speech setup, rename this session, list every session, stop playback, or make this session the coordinator.',
+      argumentHint: 'setup [test] | name <name> | status | stop | coordinator [take] | worker',
       immediate: true,
     })
     startLink($, options, e.cwd)

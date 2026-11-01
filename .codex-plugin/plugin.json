@@ -1,6 +1,6 @@
 {
   "name": "interccom",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "One voice for all your coding agents: Codex speaks short updates out loud through the shared interccom hub, and hears you hands-free.",
   "license": "MIT",
   "repository": "https://github.com/p3bozuric/interccom",

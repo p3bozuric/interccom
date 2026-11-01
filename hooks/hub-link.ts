@@ -26,6 +26,7 @@ let lastErrorAt = 0
 let role: Role = 'worker'
 // Survives link restarts (a new hub, a reconnect): the session claims the role again.
 let wantCoordinator = false
+let setupChecked = false // the first-run check runs once per session
 export const voiceTag = makeTag()
 export const delivery = createDelivery(voiceTag)
 
@@ -55,6 +56,16 @@ async function reclaimRole($: EngineInterface): Promise<void> {
     wantCoordinator = false
     toastError($, `no longer the coordinator (${String((err as Error)?.message ?? err).slice(0, 120)})`)
   }
+}
+
+// Once per session: if speech can't work yet, say what's missing and where to fix it.
+async function firstRunCheck($: EngineInterface): Promise<void> {
+  try {
+    const report = (await hubCall($, 'GET', '/setup')) as { ok?: unknown; problems?: unknown[] }
+    if (report.ok === false && report.problems?.length) {
+      toastError($, `not set up yet: ${String(report.problems[0]).slice(0, 110)} Run /interccom setup.`)
+    }
+  } catch { /* an old hub without /setup: nothing to say */ }
 }
 
 // Submit as an automated (non-person) message; fall back if this Claude Code rejects asUser: false.
@@ -110,6 +121,7 @@ async function handleLine($: EngineInterface, line: string): Promise<void> {
     reportBusy($, delivery.isBusy())
     role = 'worker'
     if (wantCoordinator) await reclaimRole($)
+    if (!setupChecked) { setupChecked = true; void firstRunCheck($) }
   } else if (msg.type === 'hello') {
     if (link && typeof msg.name === 'string') link = { ...link, name: msg.name }
   } else if (msg.type === 'heard') {

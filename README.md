@@ -6,7 +6,7 @@ interccom gives your coding agents a voice and ears: Claude Code, Codex, GitHub 
 
 Run several sessions at once and they share one voice channel. They take turns, each says its name, and you can address one by name: *"Hey Claude, frontend: run the tests."* Or make one session the **coordinator**: you talk only to it, and it keeps track of the others for you.
 
-Speech can run in the cloud (ElevenLabs) or entirely on your machine (any OpenAI-compatible local speech server, or programs such as Piper and whisper.cpp).
+Speech can run in the cloud (ElevenLabs, Deepgram, Soniox, OpenAI, Groq, Cartesia) or entirely on your machine (any OpenAI-compatible local speech server, or programs such as Piper and whisper.cpp).
 
 > **Status: early alpha (v0.1).** Tested on Windows. macOS and Linux support is new and still needs testing on real machines. See the roadmap below.
 
@@ -44,7 +44,7 @@ Until the npm package is published, run the same commands from a clone: `node pa
   - `copilot-setup` writes `~/.copilot/extensions/interccom/extension.mjs`.
   - `opencode-setup` writes `~/.config/opencode/plugins/interccom.js`.
   - Each is a few lines that load interccom from wherever it's installed, so updating interccom needs no new setup. `--print` shows the file without writing it, and `--remove` deletes it. Neither command ever overwrites a file interccom didn't write.
-- **Settings:** these agents have no interccom settings screen, so set the same options as `INTERCCOM_*` environment variables before you start the agent. For example: `INTERCCOM_TTS_ENGINE=local`, `INTERCCOM_STT_ENGINE=local`, `ELEVENLABS_API_KEY=…`. The hub uses the settings of whichever session connected most recently.
+- **Settings:** these agents have no interccom settings screen. Run `interccom setup` once (see [Setup](#setup)), or set `INTERCCOM_*` environment variables. The hub uses the settings of whichever session connected most recently.
 - **Node.js:** the hub always runs on Node, even inside OpenCode (a Bun program) or Copilot. interccom finds `node` on PATH; set `INTERCCOM_NODE` if it's elsewhere.
 - **Built-in voice:** Codex and Copilot CLI have voice input of their own. Keep it off while interccom listens, because only one program can own the mic.
 - **Coordinator:** only a Claude Code session can be the coordinator, and Claude Code's SendMessage can't reach other agents. The coordinator can still pass your exact words to them (`relay`), but never instructions of its own.
@@ -83,9 +83,7 @@ OpenCode installs the `@opencode-ai/plugin` package the plugin needs by itself. 
   - Windows: `winget install Gyan.FFmpeg`
   - macOS: `brew install ffmpeg`. Allow your terminal to use the microphone when macOS asks.
   - Linux: `sudo apt install ffmpeg` (or your distribution's package). The mic is read through PulseAudio or PipeWire.
-- Speech engines, either of:
-  - an [ElevenLabs](https://elevenlabs.io) API key with **both** permissions: *Text to Speech* and *Speech to Text*, or
-  - local engines (see [Local speech](#local-speech)); no key and no cloud
+- Speech engines: an API key for a cloud provider (ElevenLabs, Deepgram, Soniox, OpenAI, Groq, Cartesia), or local models with no key and no cloud. See [Speech engines](#speech-engines).
 - A microphone
 
 ## Install
@@ -97,13 +95,7 @@ In Claude Code (for other agents, see above):
 /plugin install interccom@interccom
 ```
 
-Then set your API key, either in the plugin's settings (`/plugin` → interccom → configure) or as an environment variable:
-
-```
-setx ELEVENLABS_API_KEY your-key-here
-```
-
-`setx` only reaches programs started afterwards. interccom also reads the saved Windows setting directly, so a restart isn't strictly needed.
+Claude Code asks which engines to use for talking and listening. Add the API key for each cloud engine you choose there, or as an environment variable (`setx DEEPGRAM_API_KEY your-key`, …). Then run `/interccom setup` to check everything. See [Setup](#setup).
 
 ## Using it
 
@@ -132,22 +124,68 @@ Even with `full`, anything destructive or outward-facing comes back to you. Add 
 
 Only one coordinator runs at a time. `/interccom coordinator take` moves the role, and `/interccom worker` steps down. Start the coordinator session with whichever model you want it to use (`claude --model …`).
 
+## Speech engines
+
+Talking (`tts_engine`) and listening (`stt_engine`) are chosen separately. Mix them freely, e.g. Deepgram for talking and Soniox for listening, or everything on your own machine.
+
+| Engine | Talking | Listening | Key | Default models |
+|---|---|---|---|---|
+| `elevenlabs` | ✓ | ✓ | `elevenlabs_api_key` / `ELEVENLABS_API_KEY` (needs Text to Speech **and** Speech to Text) | `eleven_flash_v2_5`, `scribe_v1` |
+| `deepgram` | ✓ | ✓ | `deepgram_api_key` / `DEEPGRAM_API_KEY` | `aura-2-thalia-en`, `nova-3` |
+| `soniox` | ✓ | ✓ | `soniox_api_key` / `SONIOX_API_KEY` | `tts-rt-v2` (voice `Adrian`), `stt-async-v5` |
+| `openai` | ✓ | ✓ | `openai_api_key` / `OPENAI_API_KEY` | `gpt-4o-mini-tts` (voice `alloy`), `gpt-4o-mini-transcribe` |
+| `groq` | | ✓ | `groq_api_key` / `GROQ_API_KEY` | `whisper-large-v3-turbo` |
+| `cartesia` | ✓ | | `cartesia_api_key` / `CARTESIA_API_KEY` | `sonic-3`. Set `tts_voice` to your Cartesia voice ID. |
+| `local` | ✓ | ✓ | none | your server's models (`kokoro` / `af_heart`, `Systran/faster-whisper-small`) |
+| `command` | ✓ | ✓ | none | your program |
+
+**Local models:**
+- **`local`**: any server with the OpenAI audio API (`/v1/audio/speech`, `/v1/audio/transcriptions`), on this machine or your LAN. For example:
+  - [Kokoro-FastAPI](https://github.com/remsky/Kokoro-FastAPI) for the voice;
+  - [Speaches](https://github.com/speaches-ai/speaches) (faster-whisper) or the whisper.cpp server (`--inference-path /v1/audio/transcriptions`) for transcription;
+  - LocalAI, which does both.
+
+  Point `local_tts_url` / `local_stt_url` at it. The URLs end in `/v1`.
+- **`command`**: any program, run without a shell. Quote paths that contain spaces.
+  - `tts_command` gets the text on stdin and writes audio to `{out}`: `piper --model C:\voices\en_US-amy-medium.onnx --output_file {out}`
+  - `stt_command` reads the recording from `{in}` and prints the text: `whisper-cli -m C:\models\ggml-base.en.bin -f {in} -nt -np`
+
+**Choosing a model or voice:** `tts_voice`, `tts_model` and `stt_model` apply to whichever engine is chosen. Leave them blank for that engine's default. Deepgram picks the voice through the model name, e.g. `aura-2-orion-en`.
+
+## Setup
+
+- **Claude Code:** installing the plugin asks for the talking and listening engines; add the key for each cloud engine you picked. To change them later: `/plugin` → interccom → configure.
+- **Check:** `/interccom setup` shows:
+  - what each direction will use;
+  - any missing key, with where to get one;
+  - whether ffmpeg and the audio player are installed;
+  - the microphone state.
+
+  `/interccom setup test` plays a test line. A session that starts with something missing tells you once, and points to `/interccom setup`.
+- **Codex, Copilot CLI, OpenCode:** run `interccom setup` in a terminal.
+  - It asks for both engines, plus model, voice, language and listening mode, and saves them to `~/.interccom/config.json`.
+  - For each missing key it shows the `setx` or `export` line to set.
+  - It then runs the same check. Flags skip the questions: `interccom setup --tts deepgram --stt soniox --language hr`. Also `--show` and `--test`.
+- **Precedence:** Claude Code's plugin settings, or `INTERCCOM_<SETTING>` environment variables, win over `config.json`.
+- **API keys are never written to disk by interccom.** They come from the plugin settings (stored by Claude Code) or environment variables. On Windows the saved user environment is read too, so `setx` works without a restart.
+
 ## Settings
 
 | Setting | Default | What it does |
 |---|---|---|
-| `elevenlabs_api_key` | (empty) | Your key. Falls back to `ELEVENLABS_API_KEY`. |
-| `voice_id` | `21m00Tcm4TlvDq8ikWAM` | The ElevenLabs voice. |
-| `tts_model` | `eleven_flash_v2_5` | Speech model. Flash has the lowest latency. |
-| `stt_language` | `en` | Transcription language, or `auto`. |
+| `tts_engine` / `stt_engine` | (asked at install) | See [Speech engines](#speech-engines). |
+| `*_api_key` | (empty) | One per cloud provider. Falls back to the provider's own variable. |
+| `tts_voice` | engine default | A voice of the chosen talking engine. (`voice_id` is the old name; it still works.) |
+| `tts_model` / `stt_model` | engine default | A model of the chosen engine. |
+| `stt_language` | `en` | The language you speak, or `auto`. |
 | `listen_mode` | `wake` | `wake`, `always` or `off`. |
+| `local_tts_url` / `local_stt_url` | `http://127.0.0.1:8880/v1` / `http://127.0.0.1:8000/v1` | For the `local` engines. |
+| `tts_command` / `stt_command` | (empty) | For the `command` engines. |
 | `muted` | `false` | Keep listening, but play nothing. |
-| `tts_engine` / `stt_engine` | `elevenlabs` | `elevenlabs`, `local` or `command`, chosen separately for talking and listening. |
-| `local_tts_url`, `local_tts_model`, `local_tts_voice` | `http://127.0.0.1:8880/v1`, `kokoro`, `af_heart` | For `tts_engine = local`. |
-| `local_stt_url`, `local_stt_model` | `http://127.0.0.1:8000/v1`, `Systran/faster-whisper-small` | For `stt_engine = local`. |
-| `tts_command` / `stt_command` | (empty) | For the `command` engines; see below. |
 | `autonomy` | `relay` | What the coordinator may decide alone: `relay`, `routine`, `full`. |
 | `autonomy_rules` | (empty) | Your own rules for the coordinator, in plain words. |
+
+Every setting also works as an environment variable: `INTERCCOM_` plus the name in capitals, e.g. `INTERCCOM_STT_ENGINE=soniox`.
 
 Set `INTERCCOM_MIC` to a device name to choose a specific microphone; otherwise the first one found is used.
 
@@ -155,29 +193,18 @@ Set `INTERCCOM_MIC` to a device name to choose a specific microphone; otherwise 
 - **macOS:** the device name or index as listed by `ffmpeg -f avfoundation -list_devices true -i ""`.
 - **Linux:** a PulseAudio source from `pactl list short sources`, or `alsa:<device>` (e.g. `alsa:hw:1,0`) to read ALSA directly.
 
-## Local speech
-
-Talking (`tts_engine`) and listening (`stt_engine`) can each run locally:
-
-- **`local`**: any server with the OpenAI audio API (`/v1/audio/speech`, `/v1/audio/transcriptions`). For example, [Kokoro-FastAPI](https://github.com/remsky/Kokoro-FastAPI) for voice, and [Speaches](https://github.com/speaches-ai/speaches) (faster-whisper) or the whisper.cpp server (`--inference-path /v1/audio/transcriptions`) for transcription. LocalAI does both. Point the URL settings at it; they end in `/v1`.
-- **`command`**: any program, run without a shell.
-  - `tts_command` gets the text on stdin and writes audio to `{out}`: `piper --model C:\voices\en_US-amy-medium.onnx --output_file {out}`
-  - `stt_command` reads the recording from `{in}` and prints the text: `whisper-cli -m C:\models\ggml-base.en.bin -f {in} -nt -np`
-
-  Quote paths that contain spaces.
-
-After changing engines, close all sessions so the hub restarts with the new settings. Testing steps are in [docs/testing-locally.md](docs/testing-locally.md).
-
 ## Privacy and cost
 
-- In wake-word and always-on mode, **audio of everything the mic picks up is sent to the transcription engine**, which is ElevenLabs unless you choose a local one. The wake word is checked on the transcript afterwards. Use `/listen off` when you don't want that.
-- ElevenLabs bills per character spoken and per minute transcribed. Local engines cost nothing but CPU or GPU time. The coordinator uses model tokens for every report it handles. Claude is told to keep spoken lines to one to three sentences.
+- In wake-word and always-on mode, **audio of everything the mic picks up is sent to the transcription engine** you chose. With `local` or `command`, it never leaves your machine or LAN. Soniox transcriptions and uploads are deleted right after each one. The wake word is checked on the transcript afterwards. Use `/listen off` when you don't want that.
+- Cloud providers bill per character spoken and per minute transcribed. Local engines cost nothing but CPU or GPU time. The coordinator uses model tokens for every report it handles. Claude is told to keep spoken lines to one to three sentences.
 - The hub listens only on `127.0.0.1` and requires a random per-run token. Your key is never written to disk by interccom.
 - Speech that reaches Claude mid-task carries a secret per-session tag. Text in a web page or file that imitates a voice note is treated as untrusted.
 
 ## Troubleshooting
 
+- **Start with `/interccom setup`** (or `interccom setup --show`): it names what's missing and how to fix it.
 - **"missing a permission"**: edit your key in ElevenLabs and enable both Text to Speech and Speech to Text.
+- **"… rejected the API key"**: the key for that provider is wrong or expired. The message names the setting to fix.
 - **"Couldn't reach the local speech server"**: start it, and check the URL setting ends in `/v1`.
 - **"No microphone found"**: plug one in, or set `INTERCCOM_MIC` to its exact name (see Settings for how to list devices on your platform).
 - **macOS hears nothing**: System Settings → Privacy & Security → Microphone, and allow the terminal or app that runs Claude Code.

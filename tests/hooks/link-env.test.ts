@@ -4,11 +4,14 @@ import { baseName, linkEnv, isMuted } from '../../hooks/link-env.ts'
 
 test('linkEnv maps every option', () => {
   assert.deepEqual(linkEnv({
-    elevenlabs_api_key: 'k', voice_id: 'v', tts_model: 'm', stt_language: 'hr', listen_mode: 'always', muted: true,
+    elevenlabs_api_key: 'k', tts_voice: 'v', tts_model: 'm', stt_language: 'hr', listen_mode: 'always', muted: true,
   }), {
-    INTERCCOM_API_KEY: 'k', INTERCCOM_VOICE_ID: 'v', INTERCCOM_TTS_MODEL: 'm',
+    INTERCCOM_API_KEY: 'k', INTERCCOM_TTS_VOICE: 'v', INTERCCOM_TTS_MODEL: 'm',
     INTERCCOM_STT_LANGUAGE: 'hr', INTERCCOM_LISTEN_MODE: 'always', INTERCCOM_MUTED: 'true',
   })
+  // voice_id is the old name of tts_voice.
+  assert.equal(linkEnv({ voice_id: 'old' }).INTERCCOM_TTS_VOICE, 'old')
+  assert.equal(linkEnv({ voice_id: 'old', tts_voice: 'new' }).INTERCCOM_TTS_VOICE, 'new')
 })
 
 test('linkEnv omits an empty key and drops blank values', () => {
@@ -42,21 +45,21 @@ test('baseName handles slashes, backslashes and trailing separators', () => {
   assert.equal(baseName('/'), 'session')
 })
 
-test('linkEnv passes the local engine settings through', () => {
+test('linkEnv passes engines, models, local servers, commands and every provider key through', () => {
   const env = linkEnv({
-    tts_engine: 'local', stt_engine: 'command', local_tts_url: 'http://127.0.0.1:8880/v1', local_tts_model: 'kokoro',
-    local_tts_voice: 'af_heart', local_stt_url: 'http://127.0.0.1:8000/v1', local_stt_model: 'w',
-    tts_command: 'piper --output_file {out}', stt_command: ' whisper-cli -f {in} ',
+    tts_engine: 'deepgram', stt_engine: 'soniox', stt_model: 'stt-async-v5', local_tts_url: 'http://127.0.0.1:8880/v1',
+    local_stt_url: 'http://127.0.0.1:8000/v1', tts_command: 'piper --output_file {out}', stt_command: ' whisper-cli -f {in} ',
+    deepgram_api_key: 'dg', soniox_api_key: 'sx', openai_api_key: 'oa', groq_api_key: 'gq', cartesia_api_key: 'ca',
   })
-  assert.equal(env.INTERCCOM_TTS_ENGINE, 'local')
-  assert.equal(env.INTERCCOM_STT_ENGINE, 'command')
+  assert.equal(env.INTERCCOM_TTS_ENGINE, 'deepgram')
+  assert.equal(env.INTERCCOM_STT_ENGINE, 'soniox')
+  assert.equal(env.INTERCCOM_STT_MODEL, 'stt-async-v5')
   assert.equal(env.INTERCCOM_LOCAL_TTS_URL, 'http://127.0.0.1:8880/v1')
-  assert.equal(env.INTERCCOM_LOCAL_TTS_MODEL, 'kokoro')
-  assert.equal(env.INTERCCOM_LOCAL_TTS_VOICE, 'af_heart')
   assert.equal(env.INTERCCOM_LOCAL_STT_URL, 'http://127.0.0.1:8000/v1')
-  assert.equal(env.INTERCCOM_LOCAL_STT_MODEL, 'w')
   assert.equal(env.INTERCCOM_TTS_COMMAND, 'piper --output_file {out}')
   assert.equal(env.INTERCCOM_STT_COMMAND, 'whisper-cli -f {in}')
+  assert.deepEqual([env.INTERCCOM_DEEPGRAM_API_KEY, env.INTERCCOM_SONIOX_API_KEY, env.INTERCCOM_OPENAI_API_KEY,
+    env.INTERCCOM_GROQ_API_KEY, env.INTERCCOM_CARTESIA_API_KEY], ['dg', 'sx', 'oa', 'gq', 'ca'])
 })
 
 test('every hub-facing setting in plugin.json reaches the hub env', async () => {

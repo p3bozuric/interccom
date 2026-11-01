@@ -7,17 +7,17 @@ import { TalkQueue } from './queue.mjs'
 import { route } from './router.mjs'
 import { toSpeakable } from './text.mjs'
 import { createPlayer } from './player.mjs'
-import { ENGINES } from './engines/index.mjs'
+import { TTS_ENGINES, STT_ENGINES, KEY_FIELDS } from './engines/index.mjs'
 import { hostGuidance, voiceNote } from './hosts/text.mjs'
+import { setupReport } from './setup-report.mjs'
 
 export { createPlayer }
 
 const PRIORITIES = new Set(['question', 'heads-up', 'status'])
 const MODES = new Set(['wake', 'always', 'off'])
 const CONFIG_FIELDS = [
-  'apiKey', 'voiceId', 'ttsModel', 'sttLanguage', 'listenMode', 'muted',
-  'ttsEngine', 'sttEngine', 'localTtsUrl', 'localTtsModel', 'localTtsVoice', 'localSttUrl', 'localSttModel',
-  'ttsCommand', 'sttCommand',
+  ...KEY_FIELDS, 'voiceId', 'ttsModel', 'sttModel', 'sttLanguage', 'listenMode', 'muted',
+  'ttsEngine', 'sttEngine', 'localTtsUrl', 'localSttUrl', 'ttsCommand', 'sttCommand',
 ]
 const ERROR_WINDOW_MS = 60_000
 const MAX_BODY = 1 << 20
@@ -68,6 +68,7 @@ function readJson(req) {
 
 export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 30_000, onIdleExit = () => {}, startPaused = false, streamGraceMs = 15_000, pingMs = 30_000, debugHear = false,
   hostSubmit = async ({ host }) => { throw new Error(`interccom can't start a turn in ${host} sessions`) },
+  checkMachine = async () => ({}),
 }) {
   const board = new Board()
   const queue = new TalkQueue()
@@ -75,10 +76,11 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
   const graceTimers = new Map() // sessionId -> timer removing a session that never opened /events
   const lastErrorAt = new Map() // message -> time sent
   const config = {
-    apiKey: '',
-    voiceId: '21m00Tcm4TlvDq8ikWAM',
-    ttsModel: 'eleven_flash_v2_5',
-    sttModel: 'scribe_v1',
+    ...Object.fromEntries(KEY_FIELDS.map(k => [k, ''])),
+    // Blank: the chosen engine's own default (hub/engines/index.mjs PROVIDERS).
+    voiceId: '',
+    ttsModel: '',
+    sttModel: '',
     sttLanguage: 'en',
     listenMode: 'wake',
     muted: false,
@@ -86,10 +88,7 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
     sttEngine: 'elevenlabs',
     // Kokoro-FastAPI's and Speaches' default ports.
     localTtsUrl: 'http://127.0.0.1:8880/v1',
-    localTtsModel: 'kokoro',
-    localTtsVoice: 'af_heart',
     localSttUrl: 'http://127.0.0.1:8000/v1',
-    localSttModel: 'Systran/faster-whisper-small',
     ttsCommand: '',
     sttCommand: '',
   }
@@ -98,6 +97,8 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
   const configListeners = []
   let armedUntil = 0
   let micState = 'off' // 'listening' | 'off', replayed to every new stream
+  let micName = ''
+  let lastMicError = ''
   let idleTimer = null
   const tokenBuf = Buffer.from(String(token))
 
@@ -113,7 +114,7 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
   }
 
   function broadcast(obj) {
-    if (obj?.type === 'mic') micState = obj.state
+    if (obj?.type === 'mic') { micState = obj.state; micName = obj.name ?? micName; if (obj.state === 'listening') lastMicError = '' }
     for (const res of streams.values()) send(res, obj)
   }
 
@@ -123,6 +124,7 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
     const prev = lastErrorAt.get(message)
     if (prev !== undefined && t - prev < ERROR_WINDOW_MS) return
     lastErrorAt.set(message, t)
+    if (/microphone|ffmpeg/i.test(message)) lastMicError = message
     broadcast({ type: 'error', message })
   }
 
@@ -293,7 +295,8 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
       if (k === 'listenMode') {
         if (listenSticky || !MODES.has(v)) continue
       }
-      if ((k === 'ttsEngine' || k === 'sttEngine') && !ENGINES.has(v)) continue
+      if (k === 'ttsEngine' && !TTS_ENGINES.includes(v)) continue
+      if (k === 'sttEngine' && !STT_ENGINES.includes(v)) continue
       config[k] = String(v)
     }
   }
@@ -372,6 +375,16 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
     }
     if (m === 'POST' && path === '/stop') return { flushed: stop() }
     if (m === 'POST' && path === '/host/event') return hostEvent(body, t)
+    if (m === 'GET' && path === '/setup') {
+      const machine = await checkMachine().catch(() => ({}))
+      return setupReport(config, { ...machine, mic: { state: micState, name: micName, error: lastMicError } })
+    }
+    if (m === 'POST' && path === '/setup/test') {
+      const row = session(body.sessionId)
+      queue.push({ sessionId: row.sessionId, name: row.name, text: "interccom is working. This is how I'll sound.", priority: 'question' })
+      player.kick()
+      return { queued: true }
+    }
     if (m === 'POST' && path === '/board/relay') return relay(body, t)
     // Testing aid, off unless the hub runs with INTERCCOM_DEBUG_HEAR=1: a typed line goes
     // through the same routing as a transcript, so routing can be tested without a mic.

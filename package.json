@@ -1,6 +1,6 @@
 {
   "name": "interccom",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "One voice for all your coding agents (Claude Code, Codex, GitHub Copilot CLI, OpenCode): hear conclusions and questions, talk back hands-free.",
   "license": "MIT",
   "type": "module",
@@ -10,16 +10,25 @@
   },
   "homepage": "https://github.com/p3bozuric/interccom#readme",
   "keywords": [
+    "agent",
+    "cartesia",
     "claude-code",
     "codex",
     "copilot",
-    "opencode",
-    "voice",
+    "deepgram",
+    "elevenlabs",
+    "groq",
+    "kokoro",
     "mcp",
+    "openai",
+    "opencode",
+    "piper",
+    "soniox",
     "speech",
-    "tts",
     "stt",
-    "agent"
+    "tts",
+    "voice",
+    "whisper"
   ],
   "engines": {
     "node": ">=18.3"

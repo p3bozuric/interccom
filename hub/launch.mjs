@@ -44,7 +44,8 @@ export async function probe(stateDir) {
 
 // The hub outlives the session that starts it: it gets that session's env minus
 // the API keys, which reach it only through POST /config.
-const KEY_VARS = new Set(['INTERCCOM_API_KEY', 'ELEVENLABS_API_KEY'])
+const PROVIDER_KEYS = ['ELEVENLABS', 'DEEPGRAM', 'SONIOX', 'OPENAI', 'GROQ', 'CARTESIA']
+const KEY_VARS = new Set(['INTERCCOM_API_KEY', ...PROVIDER_KEYS.flatMap(p => [`${p}_API_KEY`, `INTERCCOM_${p}_API_KEY`])])
 export function hubEnv(env = process.env) {
   // Case-insensitive: Windows env names are.
   return Object.fromEntries(Object.entries(env).filter(([k]) => !KEY_VARS.has(k.toUpperCase())))

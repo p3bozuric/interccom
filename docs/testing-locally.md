@@ -17,7 +17,7 @@ The automated tests run in the cloud with fakes. Nothing there touches a real mi
 | ffmpeg and ffplay on PATH | `ffmpeg -version`, `ffplay -version` | `winget install Gyan.FFmpeg`, then open a new terminal |
 | Claude Code 2.1.316 or newer | `claude --version` | — |
 | A microphone | `ffmpeg -hide_banner -list_devices true -f dshow -i dummy` lists an `(audio)` device | — |
-| ElevenLabs key with Text to Speech **and** Speech to Text (sections 2–6) | — | elevenlabs.io → API keys |
+| A key for at least one cloud speech provider (ElevenLabs, Deepgram, Soniox, OpenAI, Groq or Cartesia), or local engines (section 7) | `/interccom setup` | see section 1b |
 | Docker Desktop, or Piper / whisper.cpp binaries (section 7) | `docker --version` | see section 7 |
 
 ## 1. Get the branch and run the checks
@@ -63,9 +63,21 @@ Send-Heard "Hey Claude, where are we?"
 
 The variable only reaches the hub if that session is the one that starts it, which is why you clear the slate first. Use typed input for routing checks. Keep spoken input for at least sections 2 and 5, because the mic path is what's under test there.
 
+## 1b. Setup: the plugin's install questions and the setup check
+
+| # | Do | Expect |
+|---|---|---|
+| 1b.1 | Install the plugin (section 1) | Claude Code asks for **Talking: speech engine** and **Listening: speech engine** (required), plus optional keys, voice and models. Record exactly how the questions appear. |
+| 1b.2 | Pick engines but skip the key, then start a session | One toast: "interccom: not set up yet: No <Provider> API key … Run /interccom setup." |
+| 1b.3 | `/interccom setup` | A ✓/✗ list: talking, listening, ffmpeg, ffplay, microphone. Every ✗ has a "→" line with the fix, including where to get the key. |
+| 1b.4 | Add the key (`/plugin` → interccom → configure), start a new session, `/interccom setup` | All ✓. "All set." |
+| 1b.5 | `/interccom setup test` | You hear "interccom is working. This is how I'll sound." |
+| 1b.6 | In a terminal: `node hub\cli.mjs setup` | It asks for both engines, then only what the choice needs (URL for `local`, command for `command`), then voice, models, language and mode. It saves `~/.interccom/config.json` **without any key**, shows a `setx …` line for each missing key, then the same check. |
+| 1b.7 | `node hub\cli.mjs setup --tts deepgram --stt soniox --language hr`, then `--show`, then `--test` | Saved without questions. `--show` reports, and `--test` plays the test line. |
+
 ## 2. One session (v0.1 baseline)
 
-Set your key (`/plugin` → interccom → configure, or `setx ELEVENLABS_API_KEY ...`), then open one Claude Code session in any project folder.
+Use whichever engines you set up in 1b. Open one Claude Code session in any project folder.
 
 | # | Do | Expect |
 |---|---|---|
@@ -127,12 +139,13 @@ Set it in `/plugin` → interccom → configure, then restart the coordinator se
 | # | Do | Expect |
 |---|---|---|
 | 6.1 | Use a key with only Text to Speech | One toast naming the missing permission (`speech_to_text`) and the fix, once a minute at most. Speaking still works. |
-| 6.2 | Remove the key entirely, then ask Claude to speak | The mic stays off (`mic: off`). When Claude speaks, one toast says no key is configured and suggests a local engine. |
+| 6.2 | Remove the key entirely, then ask Claude to speak | The mic stays off (`mic: off`). When Claude speaks, one toast says which key is missing, the setting and variable to set, and where to get one. |
+| 6.3b | Use a wrong key for Deepgram, Soniox, OpenAI, Groq or Cartesia | One toast: "<Provider> rejected the API key (401). Check <provider>_api_key (or <PROVIDER>_API_KEY)." |
 | 6.3 | Unplug the mic | "No microphone found …" once. Plug it back in and restart the session; listening resumes. |
 
 ## 7. Local speech engines
 
-The TTS (`tts_engine`) and STT (`stt_engine`) engines are chosen independently: `elevenlabs`, `local` (an OpenAI-compatible server) or `command` (any CLI). Change them in `/plugin` → interccom → configure, then do a **clean slate** (the hub keeps the config from the session that set it), then open a session. The ElevenLabs key isn't needed when both engines are local.
+The TTS (`tts_engine`) and STT (`stt_engine`) engines are chosen independently. Change them in `/plugin` → interccom → configure, then open a new session: each new session sends its settings to the hub. No key is needed when both engines are local.
 
 ### 7a. `local` engines through an OpenAI-compatible server (Docker)
 
@@ -145,7 +158,7 @@ docker run -d --name kokoro -p 8880:8880 ghcr.io/remsky/kokoro-fastapi-cpu:lates
 docker run -d --name speaches -p 8000:8000 ghcr.io/speaches-ai/speaches:latest-cpu
 ```
 
-Settings: `tts_engine = local`, `stt_engine = local`. The URLs, `kokoro`/`af_heart` and `Systran/faster-whisper-small` are the defaults. Some servers download the model on the first request, which can take a minute.
+Settings: `tts_engine = local`, `stt_engine = local`. The URLs and the models `kokoro` (voice `af_heart`) and `Systran/faster-whisper-small` are the defaults; `tts_voice`, `tts_model` and `stt_model` override them. Some servers download the model on the first request, which can take a minute.
 
 Check the servers directly first:
 
@@ -160,7 +173,7 @@ curl.exe -s -F "file=@$env:TEMP\t.wav" -F model=Systran/faster-whisper-small htt
 | 7.2 | Stop the TTS container, ask Claude to speak | One toast: "Couldn't reach the local speech server at … Is it running?" |
 | 7.3 | Set `local_stt_url` to `http://127.0.0.1:8000` (no `/v1`) | A toast explaining the 404 and that the URL should end in `/v1`. |
 | 7.4 | Mixed: `tts_engine = elevenlabs`, `stt_engine = local` | Cloud voice, local transcription. |
-| 7.5 | whisper.cpp server instead of Speaches: `whisper-server -m ggml-base.en.bin --port 8000 --inference-path /v1/audio/transcriptions` | Transcription works. `local_stt_model` can be anything. |
+| 7.5 | whisper.cpp server instead of Speaches: `whisper-server -m ggml-base.en.bin --port 8000 --inference-path /v1/audio/transcriptions` | Transcription works. `stt_model` can be anything. |
 
 ### 7b. `command` engines (Piper, whisper.cpp CLI)
 
@@ -192,6 +205,21 @@ This support is new. Unit tests cover the device parsing and the commands, and i
 | 7.11 | Linux | `pactl list short sources`, then start a session | The first non-monitor source is used, or `default` without pactl. `mic: listening`. |
 | 7.12 | Linux | `INTERCCOM_MIC=alsa:default` | Captures through ALSA instead. |
 | 7.13 | Linux | Rerun 2.2–2.5 | Plays through `ffplay`. |
+
+## 7c-2. Cloud providers: Deepgram, Soniox, OpenAI, Groq, Cartesia
+
+These were built from each provider's official SDK on npm (endpoints, fields, default models): `@deepgram/sdk` 5.17, `@soniox/node` 2.4 and `@cartesia/cartesia-js` 4.2, plus OpenAI's audio API. Tests cover every request with a fake network. None has made a real call yet, because the cloud container had no keys and couldn't reach the providers. Test each one you have a key for:
+
+| # | Engine | Do | Expect |
+|---|---|---|---|
+| 7.p1 | Deepgram talking (`aura-2-thalia-en`) | Rerun 2.2 | Plays. Try `tts_model = aura-2-orion-en`: a different voice. |
+| 7.p2 | Deepgram listening (`nova-3`) | Rerun 2.3–2.5. Also `stt_language = auto`. | Correct transcripts. `auto` uses language detection. |
+| 7.p3 | Soniox talking (`tts-rt-v2`, voice `Adrian`) | Rerun 2.2, then set `tts_voice` to another Soniox voice | Plays in each voice. |
+| 7.p4 | Soniox listening (`stt-async-v5`) | Rerun 2.3, and in another language with `stt_language` set (e.g. `hr`) | Correct transcripts. **Record the delay**: it uploads, then polls. Check in the Soniox console that no files or transcriptions are left behind. |
+| 7.p5 | OpenAI talking and listening | Rerun 2.2–2.3. Try `tts_voice = nova`. | Works. |
+| 7.p6 | Groq listening | Rerun 2.3 | Works, and fast. |
+| 7.p7 | Cartesia talking (`sonic-3`) | Set `tts_voice` to a voice ID from play.cartesia.ai and rerun 2.2 | Plays. With `tts_voice` blank, it uses the voice from Cartesia's SDK example; record whether that works. |
+| 7.p8 | Mixed, e.g. talking `deepgram` + listening `soniox` | 2.2–2.5 | Each direction uses its own provider and key. |
 
 ## 7d. Codex
 
@@ -281,6 +309,8 @@ These are assumptions about Claude Code's plugin API that only a real session ca
    - Whether `codex queue --resume` reaches the open TUI.
 8. **Copilot extension** (7e): that Copilot loads `~/.copilot/extensions/interccom/extension.mjs`, and resolves `@github/copilot-sdk/extension` for a loader that imports interccom from outside that folder. Also that `session.send` shows in the open window, and that `onPostToolUse` context reaches the model.
 9. **OpenCode, model side** (7f): that `experimental.chat.system.transform` guidance reaches the model, and that the voice note appended in `tool.execute.after` is seen.
+10. **Cloud providers** (7c-2): first real calls to Deepgram, Soniox, OpenAI, Groq and Cartesia. In particular: the Soniox polling delay and cleanup, and whether Cartesia's `cartesia-version: 2026-08-14` header is accepted.
+11. **Install questions** (1b.1): how Claude Code presents the two required engine choices.
 
 ## 9. Results template
 

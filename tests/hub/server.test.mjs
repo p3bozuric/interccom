@@ -588,12 +588,20 @@ test('a coordinator without an open stream does not swallow speech', async () =>
 test('config: engine settings merge; an unknown engine name is ignored', async () => {
   const { hub, call } = await start()
   assert.equal(hub.getConfig().ttsEngine, 'elevenlabs')
-  await call('POST', '/config', { ttsEngine: 'local', sttEngine: 'whisperish', sttCommand: 'whisper-cli -f {in}', localTtsVoice: 'bf_emma' })
-  const c = hub.getConfig()
+  await call('POST', '/config', { ttsEngine: 'local', sttEngine: 'whisperish', sttCommand: 'whisper-cli -f {in}', voiceId: 'bf_emma', deepgramKey: 'dg' })
+  let c = hub.getConfig()
   assert.equal(c.ttsEngine, 'local')
   assert.equal(c.sttEngine, 'elevenlabs')
   assert.equal(c.sttCommand, 'whisper-cli -f {in}')
-  assert.equal(c.localTtsVoice, 'bf_emma')
+  assert.equal(c.voiceId, 'bf_emma')
+  assert.equal(c.deepgramKey, 'dg')
+  // Each direction only takes engines that can do it.
+  await call('POST', '/config', { ttsEngine: 'groq', sttEngine: 'cartesia' })
+  c = hub.getConfig()
+  assert.deepEqual([c.ttsEngine, c.sttEngine], ['local', 'elevenlabs'])
+  await call('POST', '/config', { ttsEngine: 'cartesia', sttEngine: 'groq' })
+  c = hub.getConfig()
+  assert.deepEqual([c.ttsEngine, c.sttEngine], ['cartesia', 'groq'])
 })
 
 test('debug hear is a 404 unless enabled, then routes like a transcript', async () => {

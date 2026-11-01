@@ -1,7 +1,7 @@
 // Hub entry point: node hub/main.mjs [--state-dir <dir>]
 // Writes <stateDir>/hub.json { port, token, pid } once listening.
 // The API key arrives only via POST /config from sessions. Speech engines: hub/engines/index.mjs.
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { randomBytes, randomUUID } from 'node:crypto'
 import { appendFileSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { mkdir, rm, writeFile } from 'node:fs/promises'
@@ -10,7 +10,7 @@ import path from 'node:path'
 import { parseArgs } from 'node:util'
 import { createHub } from './server.mjs'
 import { createEngines, audioExt } from './engines/index.mjs'
-import { playArgv, playOutcome, listMics } from './audio/index.mjs'
+import { playArgv, playOutcome, listMics, FFMPEG_HINT } from './audio/index.mjs'
 import { createListenerManager } from './listener.mjs'
 import { createVad } from './vad.mjs'
 import { pcmToWav } from './wav.mjs'
@@ -91,6 +91,21 @@ function hostSubmit({ host, hostSessionId, cwd, text }) {
   })
 }
 
+// For the setup check: are the audio programs there? (No shell; cwd is the state dir.)
+function runs(cmd, args) {
+  const r = spawnSync(cmd, args, { stdio: 'ignore', windowsHide: true, cwd: stateDir, timeout: 5000 })
+  return !r.error
+}
+async function checkMachine() {
+  const [player] = playArgv('x')
+  const playerArgs = player === 'afplay' ? ['-h'] : ['-version']
+  return {
+    ffmpeg: runs('ffmpeg', ['-version']),
+    ffmpegHint: FFMPEG_HINT,
+    player: { name: player, ok: runs(player, playerArgs), hint: playOutcome({ error: Object.assign(new Error(''), { code: 'ENOENT' }) })?.message },
+  }
+}
+
 function removeHubFile() {
   try {
     if (JSON.parse(readFileSync(hubFile, 'utf8')).pid === process.pid) unlinkSync(hubFile)
@@ -104,7 +119,7 @@ async function shutdown() {
   process.exit(0)
 }
 
-const hub = createHub({ token, engines, audio, onIdleExit: shutdown, hostSubmit, debugHear: process.env.INTERCCOM_DEBUG_HEAR === '1' })
+const hub = createHub({ token, engines, audio, onIdleExit: shutdown, hostSubmit, checkMachine, debugHear: process.env.INTERCCOM_DEBUG_HEAR === '1' })
 const listener = createListenerManager({ hub, listMics, stt: engines.stt, sttReady: engines.sttReady, pcmToWav, createVad })
 listener.start() // follows /config and /listen changes from here on
 const { port } = await hub.listen(0)

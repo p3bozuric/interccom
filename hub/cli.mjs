@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // interccom command line (the npm package's bin).
+//   interccom setup [--tts <e> --stt <e> ...|--show|--test]   choose speech engines, check setup
 //   interccom mcp [--host codex] [--name <n>] [--cwd <dir>]   MCP server for any agent
 //   interccom codex-hook                                      Codex command hook (stdin JSON)
 //   interccom codex-setup                                     print manual Codex config
@@ -16,6 +17,7 @@ const cliPath = fileURLToPath(import.meta.url)
 const USAGE = `interccom ${pkg.version}: one voice for all your coding agents.
 
 Usage:
+  interccom setup [--tts <engine>] [--stt <engine>] [--voice <v>] [--show] [--test]
   interccom mcp [--host codex] [--name <name>] [--cwd <dir>]
   interccom codex-hook
   interccom codex-setup
@@ -58,6 +60,11 @@ async function main(argv) {
     const { values } = parseArgs({ args: rest, options: { host: { type: 'string' }, name: { type: 'string' }, cwd: { type: 'string' } } })
     const { runMcp } = await import('./mcp.mjs')
     await runMcp({ host: values.host || 'mcp', name: values.name, cwd: values.cwd || process.cwd(), version: pkg.version })
+    return
+  }
+  if (cmd === 'setup') {
+    const { runSetup } = await import('./setup-cli.mjs')
+    await runSetup(rest)
     return
   }
   if (cmd === 'codex-hook') {

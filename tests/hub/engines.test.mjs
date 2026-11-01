@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { fileURLToPath } from 'node:url'
 import * as local from '../../hub/engines/local.mjs'
 import * as command from '../../hub/engines/command.mjs'
-import { createEngines, audioExt, ENGINES } from '../../hub/engines/index.mjs'
+import { createEngines, audioExt, problem, resolved, TTS_ENGINES, STT_ENGINES } from '../../hub/engines/index.mjs'
 import { EngineError } from '../../hub/engines/elevenlabs.mjs'
 
 const fixture = name => fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url))
@@ -42,7 +42,7 @@ test('local stt posts multipart to {url}/audio/transcriptions, language unless a
 test('local errors name the cause: unreachable, 404 path, bad URL, other status', async () => {
   const down = async () => { throw new TypeError('fetch failed') }
   await assert.rejects(local.tts('a', { url: 'http://127.0.0.1:1/v1', fetch: down }),
-    e => e instanceof EngineError && e.code === 'network' && /Is it running\?/.test(e.message))
+    e => e instanceof EngineError && e.code === 'network' && /Couldn't reach the local speech server .*server is running/.test(e.message))
   await assert.rejects(local.stt(Buffer.from('w'), { url: 'http://h/v1', model: 'm', fetch: fakeFetch(new Response('no', { status: 404 })) }),
     e => e.code === 'config' && /\/v1\/audio\/transcriptions/.test(e.message))
   await assert.rejects(local.tts('a', { url: 'not a url', fetch: fakeFetch(new Response('')) }), e => e.code === 'config')
@@ -97,44 +97,72 @@ function recorder() {
     tts: async (text, o) => { calls.push([name, 'tts', text, o]); return Buffer.from('a') },
     stt: async (wav, o) => { calls.push([name, 'stt', o]); return 't' },
   })
-  return { calls, impl: { elevenlabs: mk('elevenlabs'), local: mk('local'), command: mk('command') } }
+  const impl = Object.fromEntries(['elevenlabs', 'local', 'command', 'deepgram', 'soniox', 'cartesia'].map(n => [n, mk(n)]))
+  return { calls, impl }
 }
 
+const KEYS = { apiKey: 'el', deepgramKey: 'dg', sonioxKey: 'sx', openaiKey: 'oa', groqKey: 'gq', cartesiaKey: 'ca' }
 const CFG = {
-  apiKey: 'k', voiceId: 'v', ttsModel: 'tm', sttModel: 'sm', sttLanguage: 'en',
+  ...KEYS, voiceId: '', ttsModel: '', sttModel: '', sttLanguage: 'hr',
   ttsEngine: 'elevenlabs', sttEngine: 'elevenlabs',
-  localTtsUrl: 'http://t/v1', localTtsModel: 'kokoro', localTtsVoice: 'af', localSttUrl: 'http://s/v1', localSttModel: 'w',
-  ttsCommand: 'piper {out}', sttCommand: 'whisper {in}',
+  localTtsUrl: 'http://t/v1', localSttUrl: 'http://s/v1', ttsCommand: 'piper {out}', sttCommand: 'whisper {in}',
 }
 
-test('createEngines routes each direction to its own engine with the right options', async () => {
+test('createEngines: every engine gets its own defaults, key and language', async () => {
   const { calls, impl } = recorder()
   const e = createEngines({ impl, cwd: '/state' })
-  await e.tts('x', CFG)
-  await e.stt(Buffer.from('w'), { ...CFG, sttEngine: 'local' })
-  await e.tts('y', { ...CFG, ttsEngine: 'command' })
-  await e.stt(Buffer.from('w'), { ...CFG, sttEngine: 'command' })
-  await e.tts('z', { ...CFG, ttsEngine: 'local' })
+  for (const ttsEngine of ['elevenlabs', 'deepgram', 'soniox', 'openai', 'cartesia', 'local', 'command']) await e.tts('x', { ...CFG, ttsEngine })
+  for (const sttEngine of ['elevenlabs', 'deepgram', 'soniox', 'openai', 'groq', 'local', 'command']) await e.stt(Buffer.from('w'), { ...CFG, sttEngine })
+  const oa = { label: 'OpenAI', keySetting: 'openai_api_key (or OPENAI_API_KEY)', timeoutMs: 20_000 }
   assert.deepEqual(calls, [
-    ['elevenlabs', 'tts', 'x', { apiKey: 'k', voiceId: 'v', modelId: 'tm' }],
-    ['local', 'stt', { url: 'http://s/v1', model: 'w', language: 'en' }],
-    ['command', 'tts', 'y', { command: 'piper {out}', cwd: '/state' }],
+    ['elevenlabs', 'tts', 'x', { apiKey: 'el', voiceId: '21m00Tcm4TlvDq8ikWAM', modelId: 'eleven_flash_v2_5' }],
+    ['deepgram', 'tts', 'x', { apiKey: 'dg', model: 'aura-2-thalia-en' }],
+    ['soniox', 'tts', 'x', { apiKey: 'sx', model: 'tts-rt-v2', voice: 'Adrian', language: 'hr' }],
+    ['local', 'tts', 'x', { url: 'https://api.openai.com/v1', model: 'gpt-4o-mini-tts', voice: 'alloy', apiKey: 'oa', ...oa }],
+    ['cartesia', 'tts', 'x', { apiKey: 'ca', model: 'sonic-3', voice: 'e07c00bc-4134-4eae-9ea4-1a55fb45746b', language: 'hr' }],
+    ['local', 'tts', 'x', { url: 'http://t/v1', model: 'kokoro', voice: 'af_heart' }],
+    ['command', 'tts', 'x', { command: 'piper {out}', cwd: '/state' }],
+    ['elevenlabs', 'stt', { apiKey: 'el', model: 'scribe_v1', language: 'hr' }],
+    ['deepgram', 'stt', { apiKey: 'dg', model: 'nova-3', language: 'hr' }],
+    ['soniox', 'stt', { apiKey: 'sx', model: 'stt-async-v5', language: 'hr' }],
+    ['local', 'stt', { url: 'https://api.openai.com/v1', model: 'gpt-4o-mini-transcribe', language: 'hr', apiKey: 'oa', ...oa }],
+    ['local', 'stt', { url: 'https://api.groq.com/openai/v1', model: 'whisper-large-v3-turbo', language: 'hr', apiKey: 'gq', label: 'Groq', keySetting: 'groq_api_key (or GROQ_API_KEY)', timeoutMs: 20_000 }],
+    ['local', 'stt', { url: 'http://s/v1', model: 'Systran/faster-whisper-small', language: 'hr' }],
     ['command', 'stt', { command: 'whisper {in}', cwd: '/state' }],
-    ['local', 'tts', 'z', { url: 'http://t/v1', model: 'kokoro', voice: 'af' }],
   ])
 })
 
-test('createEngines: no key is an error only for elevenlabs; sttReady follows the engine', async () => {
+test('createEngines: the person\'s model and voice win over the defaults', async () => {
+  const { calls, impl } = recorder()
+  const e = createEngines({ impl })
+  await e.tts('x', { ...CFG, ttsEngine: 'deepgram', ttsModel: 'aura-2-orion-en' })
+  await e.stt(Buffer.from('w'), { ...CFG, sttEngine: 'soniox', sttModel: 'stt-async-v4' })
+  await e.tts('x', { ...CFG, ttsEngine: 'openai', voiceId: 'nova', ttsModel: 'tts-1' })
+  assert.equal(calls[0][3].model, 'aura-2-orion-en')
+  assert.equal(calls[1][2].model, 'stt-async-v4')
+  assert.deepEqual([calls[2][3].voice, calls[2][3].model], ['nova', 'tts-1'])
+})
+
+test('problems name the missing key and where to get it; sttReady follows them', () => {
+  const none = { ...CFG, ...Object.fromEntries(Object.keys(KEYS).map(k => [k, ''])) }
+  assert.match(problem({ ...none, ttsEngine: 'deepgram' }, 'tts'), /^No Deepgram API key\. Set deepgram_api_key .* DEEPGRAM_API_KEY\. Get one at console\.deepgram\.com\.$/)
+  assert.match(problem({ ...none, sttEngine: 'soniox' }, 'stt'), /SONIOX_API_KEY/)
+  assert.equal(problem({ ...none, sttEngine: 'local' }, 'stt'), '')
+  assert.match(problem({ ...none, ttsEngine: 'groq' }, 'tts'), /groq can't do talking/)
+  assert.match(problem({ ...none, sttEngine: 'cartesia' }, 'stt'), /cartesia can't do listening/)
+  assert.match(problem({ ...none, sttEngine: 'command', sttCommand: '' }, 'stt'), /stt_command is empty/)
   const { impl } = recorder()
   const e = createEngines({ impl })
-  const noKey = { ...CFG, apiKey: '' }
-  assert.throws(() => e.tts('x', noKey), e => e.code === 'auth' && /local engine/.test(e.message))
-  await e.tts('x', { ...noKey, ttsEngine: 'local' })
-  assert.equal(e.sttReady(noKey), false)
-  assert.equal(e.sttReady({ ...noKey, sttEngine: 'local' }), true)
-  assert.equal(e.sttReady({ ...noKey, sttEngine: 'command', sttCommand: '' }), false)
-  assert.throws(() => e.stt(Buffer.from('w'), { ...CFG, sttEngine: 'command', sttCommand: '' }), e => e.code === 'config')
-  assert.deepEqual([...ENGINES], ['elevenlabs', 'local', 'command'])
+  assert.equal(e.sttReady(none), false)
+  assert.equal(e.sttReady({ ...none, sttEngine: 'local' }), true)
+  assert.throws(() => e.tts('x', { ...none, ttsEngine: 'openai' }), err => err.code === 'auth' && /OPENAI_API_KEY/.test(err.message))
+  assert.throws(() => e.stt(Buffer.from('w'), { ...CFG, sttEngine: 'command', sttCommand: '' }), err => err.code === 'config')
+})
+
+test('engine lists per direction', () => {
+  assert.deepEqual(TTS_ENGINES, ['elevenlabs', 'deepgram', 'soniox', 'openai', 'cartesia', 'local', 'command'])
+  assert.deepEqual(STT_ENGINES, ['elevenlabs', 'deepgram', 'soniox', 'openai', 'groq', 'local', 'command'])
+  assert.deepEqual(resolved({}, 'tts'), { engine: 'elevenlabs', model: 'eleven_flash_v2_5', voice: '21m00Tcm4TlvDq8ikWAM' })
 })
 
 test('audioExt sniffs wav, ogg, flac, else mp3', () => {

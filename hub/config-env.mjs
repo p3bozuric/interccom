@@ -1,24 +1,65 @@
-// The hub config a session sends on connect, from INTERCCOM_* variables (set by the
-// Claude Code plugin from its settings, or by hand in another agent's MCP config).
-import { resolveApiKey } from './keys.mjs'
+// The hub config a session sends on connect. Every setting has one name, used everywhere:
+// the Claude Code plugin settings, ~/.interccom/config.json (written by `interccom setup`,
+// for agents without a settings screen) and an INTERCCOM_<NAME> environment variable.
+// Precedence: plugin setting / INTERCCOM_* variable, then config.json, then the default.
+// API keys are never read from config.json: plugin setting, INTERCCOM_*, then the provider's
+// own variable (DEEPGRAM_API_KEY, ...), then on Windows the saved user environment.
+import { readFileSync } from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import { resolveKey } from './keys.mjs'
+import { PROVIDERS } from './engines/index.mjs'
 
-export function configFromEnv(env = process.env, platform = process.platform) {
-  const apiKey = env.INTERCCOM_NO_KEY_FALLBACK
-    ? env.INTERCCOM_API_KEY || ''
-    : resolveApiKey({ configKey: env.INTERCCOM_API_KEY, env, platform })
-  const config = {}
-  if (apiKey) config.apiKey = apiKey
-  if (env.INTERCCOM_VOICE_ID) config.voiceId = env.INTERCCOM_VOICE_ID
-  if (env.INTERCCOM_TTS_MODEL) config.ttsModel = env.INTERCCOM_TTS_MODEL
-  if (env.INTERCCOM_STT_LANGUAGE) config.sttLanguage = env.INTERCCOM_STT_LANGUAGE
-  if (env.INTERCCOM_LISTEN_MODE) config.listenMode = env.INTERCCOM_LISTEN_MODE
-  const passthrough = {
-    INTERCCOM_TTS_ENGINE: 'ttsEngine', INTERCCOM_STT_ENGINE: 'sttEngine',
-    INTERCCOM_LOCAL_TTS_URL: 'localTtsUrl', INTERCCOM_LOCAL_TTS_MODEL: 'localTtsModel', INTERCCOM_LOCAL_TTS_VOICE: 'localTtsVoice',
-    INTERCCOM_LOCAL_STT_URL: 'localSttUrl', INTERCCOM_LOCAL_STT_MODEL: 'localSttModel',
-    INTERCCOM_TTS_COMMAND: 'ttsCommand', INTERCCOM_STT_COMMAND: 'sttCommand',
+// setting name -> hub config field. Env variable: INTERCCOM_ + upper-case setting name.
+export const SETTINGS = {
+  tts_engine: 'ttsEngine',
+  stt_engine: 'sttEngine',
+  tts_voice: 'voiceId',
+  tts_model: 'ttsModel',
+  stt_model: 'sttModel',
+  stt_language: 'sttLanguage',
+  listen_mode: 'listenMode',
+  local_tts_url: 'localTtsUrl',
+  local_stt_url: 'localSttUrl',
+  tts_command: 'ttsCommand',
+  stt_command: 'sttCommand',
+}
+// Older names still honoured.
+const ALIASES = { tts_voice: ['INTERCCOM_VOICE_ID'] }
+
+export const envName = setting => `INTERCCOM_${setting.toUpperCase()}`
+
+export function configFile(env = process.env) {
+  return path.join(env.INTERCCOM_STATE_DIR || path.join(os.homedir(), '.interccom'), 'config.json')
+}
+
+export function readConfigFile(file) {
+  try {
+    const v = JSON.parse(readFileSync(file, 'utf8'))
+    return v && typeof v === 'object' && !Array.isArray(v) ? v : {}
+  } catch {
+    return {}
   }
-  for (const [name, field] of Object.entries(passthrough)) if (env[name]) config[field] = env[name]
-  if (env.INTERCCOM_MUTED === 'true' || env.INTERCCOM_MUTED === 'false') config.muted = env.INTERCCOM_MUTED === 'true'
+}
+
+export function configFromEnv(env = process.env, platform = process.platform, { file = readConfigFile(configFile(env)), readRegistry } = {}) {
+  const config = {}
+  for (const [setting, field] of Object.entries(SETTINGS)) {
+    const fromEnv = [envName(setting), ...(ALIASES[setting] ?? [])].map(n => env[n]).find(v => v !== undefined && String(v).trim() !== '')
+    const v = fromEnv ?? file[setting]
+    if (v !== undefined && v !== null && String(v).trim() !== '') config[field] = String(v).trim()
+  }
+  const muted = env.INTERCCOM_MUTED ?? (file.muted === undefined ? undefined : String(file.muted))
+  if (muted === 'true' || muted === 'false') config.muted = muted === 'true'
+
+  for (const p of Object.values(PROVIDERS)) {
+    if (!p.key) continue
+    // ElevenLabs's plugin key has always arrived as INTERCCOM_API_KEY.
+    const configKey = env[envName(p.setting)] || (p.key === 'apiKey' ? env.INTERCCOM_API_KEY : '')
+    const key = env.INTERCCOM_NO_KEY_FALLBACK
+      ? configKey || ''
+      : resolveKey({ configKey, envName: p.env, env, platform, ...(readRegistry ? { readRegistry } : {}) })
+    if (key) config[p.key] = key
+  }
   return config
 }
