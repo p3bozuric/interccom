@@ -484,3 +484,103 @@ test('a newly opened stream gets the current mic state right after hello', async
   assert.equal(late.raw[0].type, 'hello')
   assert.deepEqual(await late.rawLine(1), { type: 'mic', state: 'listening' })
 })
+
+// --- Coordinator (Plan 2) ---
+
+async function withCoordinator(opts) {
+  const h = await start(opts)
+  const coord = await h.register('boss')
+  const worker = await h.register('api')
+  const cs = await h.open(coord.sessionId)
+  const ws = await h.open(worker.sessionId)
+  const r = await h.call('POST', `/sessions/${coord.sessionId}/role`, { role: 'coordinator' })
+  assert.deepEqual(r, { status: 200, json: { role: 'coordinator', name: 'boss' } })
+  return { ...h, coord, worker, cs, ws }
+}
+
+test('coordinator: only one per machine; a second is refused unless it takes over', async () => {
+  const { call, register, open, coord, cs } = await withCoordinator()
+  const other = await register('ops')
+  await open(other.sessionId)
+  const refused = await call('POST', `/sessions/${other.sessionId}/role`, { role: 'coordinator' })
+  assert.equal(refused.status, 409)
+  assert.match(refused.json.error, /boss is already the coordinator/)
+  const took = await call('POST', `/sessions/${other.sessionId}/role`, { role: 'coordinator', takeover: true })
+  assert.equal(took.status, 200)
+  assert.deepEqual(await cs.line(1), { type: 'role', role: 'worker', reason: 'ops took over as coordinator' })
+  const board = (await call('GET', '/board')).json
+  assert.equal(board.coordinator, 'ops')
+  assert.equal(board.sessions.find(r => r.sessionId === coord.sessionId).role, 'worker')
+  assert.equal((await call('POST', `/sessions/${other.sessionId}/role`, { role: 'boss' })).status, 400)
+})
+
+test('coordinator: hears every transcript, with the addressed name as a hint', async () => {
+  const { hub, cs, ws } = await withCoordinator()
+  await hub.hear('Hey Claude, api: run the tests')
+  assert.deepEqual(await cs.line(1), { type: 'heard', text: 'run the tests', addressed: 'api' })
+  await hub.hear('Hey Claude, where are we?')
+  assert.deepEqual(await cs.line(2), { type: 'heard', text: 'where are we?' })
+  assert.equal(ws.lines.length, 1) // hello only
+})
+
+test('coordinator: worker speech becomes a report, not audio; questions stay open', async () => {
+  const audio = fakeAudio()
+  const { call, cs, worker } = await withCoordinator({ audio })
+  const r = await call('POST', '/speak', { sessionId: worker.sessionId, text: 'Should I **drop** the table?', priority: 'question' })
+  assert.deepEqual(r.json, { queued: true, spoken: 'Should I drop the table?', relayed: true })
+  assert.deepEqual(await cs.line(1), { type: 'report', from: 'api', priority: 'question', text: 'Should I drop the table?' })
+  await tick()
+  assert.deepEqual(audio.played, [])
+  let row = (await call('GET', '/board')).json.sessions.find(s => s.name === 'api')
+  assert.equal(row.openQuestion, 'Should I drop the table?')
+  assert.equal(row.lastLine, 'Should I drop the table?')
+  // A later non-question update from the worker means it moved on.
+  await call('POST', '/speak', { sessionId: worker.sessionId, text: 'Done.', priority: 'status' })
+  row = (await call('GET', '/board')).json.sessions.find(s => s.name === 'api')
+  assert.equal(row.openQuestion, '')
+})
+
+test('coordinator: its own speech plays without a name prefix', async () => {
+  const audio = fakeAudio()
+  const { call, coord } = await withCoordinator({ audio })
+  await call('POST', '/speak', { sessionId: coord.sessionId, text: 'API finished.' })
+  await waitFor(() => audio.played.length === 1)
+  assert.deepEqual(audio.played, ['API finished.'])
+})
+
+test('coordinator: resolve clears an open question and decisions are logged; workers may not', async () => {
+  const { call, coord, worker } = await withCoordinator()
+  await call('POST', '/speak', { sessionId: worker.sessionId, text: 'Which port?', priority: 'question' })
+  assert.deepEqual((await call('POST', '/board/resolve', { sessionId: coord.sessionId, name: 'api' })).json, { resolved: 'api' })
+  assert.equal((await call('POST', '/board/resolve', { sessionId: coord.sessionId, name: 'nope' })).status, 404)
+  assert.deepEqual((await call('POST', '/board/decision', { sessionId: coord.sessionId, text: 'Told api to use port 8080.' })).json, { logged: true })
+  assert.equal((await call('POST', '/board/decision', { sessionId: worker.sessionId, text: 'x' })).status, 403)
+  const board = (await call('GET', '/board')).json
+  assert.equal(board.sessions.find(s => s.name === 'api').openQuestion, '')
+  assert.deepEqual(board.decisions.map(d => d.text), ['Told api to use port 8080.'])
+})
+
+test('coordinator gone: workers play and hear directly again', async () => {
+  const audio = fakeAudio()
+  const { hub, call, cs, ws, worker } = await withCoordinator({ audio })
+  cs.abort()
+  await tick(50)
+  assert.equal((await call('GET', '/board')).json.coordinator, null)
+  await call('POST', '/speak', { sessionId: worker.sessionId, text: 'Back on my own.' })
+  await waitFor(() => audio.played.length === 1)
+  assert.deepEqual(audio.played, ['Back on my own.'])
+  await hub.hear('Hey Claude, hello')
+  assert.deepEqual(await ws.line(1), { type: 'heard', text: 'hello' })
+})
+
+test('a coordinator without an open stream does not swallow speech', async () => {
+  const audio = fakeAudio()
+  const { call, register, open } = await start({ audio })
+  const c = await register('boss')
+  const w = await register('api')
+  await open(w.sessionId)
+  await call('POST', `/sessions/${c.sessionId}/role`, { role: 'coordinator' })
+  await call('POST', '/speak', { sessionId: w.sessionId, text: 'Plays anyway.' })
+  await waitFor(() => audio.played.length === 1)
+  assert.deepEqual(audio.played, ['api: Plays anyway.'])
+})

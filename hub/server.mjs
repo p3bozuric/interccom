@@ -2,7 +2,7 @@
 // voice routing, and NDJSON event streams back to sessions.
 import http from 'node:http'
 import { createHmac, timingSafeEqual } from 'node:crypto'
-import { Board } from './board.mjs'
+import { Board, ROLES } from './board.mjs'
 import { TalkQueue } from './queue.mjs'
 import { route } from './router.mjs'
 import { toSpeakable } from './text.mjs'
@@ -121,10 +121,17 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
     return flushed
   }
 
+  // The coordinator counts only once its stream is open: until then, sessions work as if it weren't there.
+  function liveCoordinator() {
+    const c = board.coordinator()
+    return c && streams.has(c.sessionId) ? c : undefined
+  }
+
   async function hear(text) {
+    const coord = liveCoordinator()
     const r = route(String(text ?? ''), {
       mode: config.listenMode,
-      names: board.list().map(row => row.name),
+      names: board.list().filter(row => row !== coord).map(row => row.name),
       armedUntil,
       now: now(),
     })
@@ -132,12 +139,36 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
     if (r.kind === 'stop') { stop(); return }
     if (r.kind !== 'deliver') return
     armedUntil = 0
+    if (coord) {
+      // The coordinator hears everything; a name after the wake word is a hint, and it does the routing.
+      board.markActive(coord.sessionId, now())
+      send(streams.get(coord.sessionId), { type: 'heard', text: r.text, ...(r.name !== undefined ? { addressed: r.name } : {}) })
+      return
+    }
     const target = (r.name !== undefined && board.byName(r.name)) || board.defaultTarget()
     const res = target && streams.get(target.sessionId)
     if (!res) return
     // Whoever you just spoke to is the one you're working with now.
     board.markActive(target.sessionId, now())
     send(res, { type: 'heard', text: r.text })
+  }
+
+  // One coordinator per machine: a second one is refused unless it takes over.
+  function setRole(id, role, takeover, t) {
+    if (!ROLES.has(role)) throw new HttpError(400, 'role must be worker or coordinator')
+    const row = session(id)
+    if (role === 'coordinator') {
+      const current = board.coordinator()
+      if (current && current !== row) {
+        if (!takeover) throw new HttpError(409, `${current.name} is already the coordinator`)
+        board.setRole(current.sessionId, 'worker', t)
+        const res = streams.get(current.sessionId)
+        if (res) send(res, { type: 'role', role: 'worker', reason: `${row.name} took over as coordinator` })
+      }
+    }
+    board.setRole(id, role, t)
+    if (role === 'coordinator') board.setQuestion(id, '', t)
+    return { role, name: row.name }
   }
 
   function mergeConfig(body) {
@@ -197,7 +228,13 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
 
     if (m === 'GET' && path === '/health') return { ok: true, sessions: board.size }
     if (m === 'GET' && path === '/board') {
-      return { sessions: board.list().map(r => ({ ...r })), mode: config.listenMode, playing: player.isPlaying() }
+      return {
+        sessions: board.list().map(r => ({ ...r })),
+        mode: config.listenMode,
+        playing: player.isPlaying(),
+        coordinator: liveCoordinator()?.name ?? null,
+        decisions: board.decisions(),
+      }
     }
     if (m === 'POST' && path === '/sessions') {
       cancelIdle()
@@ -221,12 +258,36 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
       const priority = PRIORITIES.has(body.priority) ? body.priority : 'status'
       const spoken = toSpeakable(body.text ?? '')
       if (!spoken) return { queued: false }
+      const coord = liveCoordinator()
+      if (coord && coord !== row) {
+        // With a coordinator, workers report to it instead of the speakers.
+        board.setLastLine(row.sessionId, spoken, t)
+        board.setQuestion(row.sessionId, priority === 'question' ? spoken : '', t)
+        send(streams.get(coord.sessionId), { type: 'report', from: row.name, priority, text: spoken })
+        return { queued: true, spoken, relayed: true }
+      }
+      if (row.role !== 'coordinator') board.setQuestion(row.sessionId, priority === 'question' ? spoken : '', t)
       queue.push({ sessionId: row.sessionId, name: row.name, text: spoken, priority })
       player.kick()
       return { queued: true, spoken }
     }
 
-    const sm = /^\/sessions\/([^/]+)(?:\/(name|state|active))?$/.exec(path)
+    if (m === 'POST' && (path === '/board/resolve' || path === '/board/decision')) {
+      const row = session(body.sessionId)
+      if (row.role !== 'coordinator') throw new HttpError(403, 'only the coordinator can change the board')
+      if (path === '/board/decision') {
+        const text = toSpeakable(body.text ?? '')
+        if (!text) throw new HttpError(400, 'decision text is empty')
+        board.logDecision(text, t)
+        return { logged: true }
+      }
+      const target = board.byName(String(body.name ?? ''))
+      if (!target) throw new HttpError(404, 'no session by that name')
+      board.setQuestion(target.sessionId, '', t)
+      return { resolved: target.name }
+    }
+
+    const sm = /^\/sessions\/([^/]+)(?:\/(name|state|active|role))?$/.exec(path)
     if (sm) {
       let id
       try { id = decodeURIComponent(sm[1]) } catch { throw new HttpError(400, 'malformed session id') }
@@ -236,6 +297,7 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
         session(id)
         if (action === 'name') return { name: board.rename(id, body.name, t) }
         if (action === 'state') { board.setBusy(id, Boolean(body.busy), t); return {} }
+        if (action === 'role') return setRole(id, body.role, Boolean(body.takeover), t)
         board.markActive(id, t)
         return {}
       }

@@ -21,7 +21,11 @@
       "title": "ElevenLabs model",
       "description": "TTS model; flash is the lowest latency.",
       "default": "eleven_flash_v2_5",
-      "options": ["eleven_flash_v2_5", "eleven_turbo_v2_5", "eleven_multilingual_v2"]
+      "options": [
+        "eleven_flash_v2_5",
+        "eleven_turbo_v2_5",
+        "eleven_multilingual_v2"
+      ]
     },
     "stt_language": {
       "type": "string",
@@ -34,13 +38,34 @@
       "title": "Listening mode",
       "description": "always: everything you say is sent. wake: only speech starting with \"hey Claude\". off: no mic.",
       "default": "wake",
-      "options": ["always", "wake", "off"]
+      "options": [
+        "always",
+        "wake",
+        "off"
+      ]
     },
     "muted": {
       "type": "boolean",
       "title": "Muted",
       "description": "Keep the speak tool but play nothing.",
       "default": false
+    },
+    "autonomy": {
+      "type": "string",
+      "title": "Coordinator autonomy",
+      "description": "What the coordinator may decide on its own. relay: only pass things on and ask you. routine: also answer routine questions. full: decide like a careful senior engineer. All three still ask about anything destructive or outward-facing.",
+      "default": "relay",
+      "options": [
+        "relay",
+        "routine",
+        "full"
+      ]
+    },
+    "autonomy_rules": {
+      "type": "string",
+      "title": "Coordinator rules",
+      "description": "Your own rules for the coordinator, in plain words, e.g. \"never approve database migrations\". The more restrictive rule wins.",
+      "default": ""
     }
   }
 }
