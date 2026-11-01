@@ -20,7 +20,15 @@ after(async () => {
   for (const h of hubs) await h.close()
   for (const d of dirs) { try { pids.add(JSON.parse(fs.readFileSync(path.join(d, 'hub.json'), 'utf8')).pid) } catch { /* none */ } }
   for (const pid of pids) { try { process.kill(pid) } catch { /* gone */ } }
-  for (const d of dirs) fs.rmSync(d, { recursive: true, force: true })
+  // On Windows a killed hub holds its state dir for a moment after the kill.
+  for (const d of dirs) {
+    for (let i = 0; ; i++) {
+      try { fs.rmSync(d, { recursive: true, force: true }); break } catch (e) {
+        if (e.code !== 'EPERM' && e.code !== 'EBUSY' || i >= 50) throw e
+        await new Promise(r => setTimeout(r, 100))
+      }
+    }
+  }
 })
 const waitFor = async (cond, ms = 3000) => {
   const end = Date.now() + ms

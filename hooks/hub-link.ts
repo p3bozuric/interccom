@@ -27,6 +27,10 @@ let role: Role = 'worker'
 // Survives link restarts (a new hub, a reconnect): the session claims the role again.
 let wantCoordinator = false
 let setupChecked = false // the first-run check runs once per session
+let mic: Mic = 'not connected'
+let cue = 'waiting'
+// A name the person gave (/interccom name, /rename): kept when the link restarts.
+let chosenName = ''
 export const voiceTag = makeTag()
 export const delivery = createDelivery(voiceTag)
 
@@ -82,6 +86,7 @@ export async function deliverReports($: EngineInterface, text: string | undefine
 }
 
 export function setLinkName(name: string): void {
+  chosenName = name
   if (link) link = { ...link, name }
 }
 
@@ -99,6 +104,23 @@ export function reportBusy($: EngineInterface, busy: boolean): void {
   const id = link?.sessionId
   if (!id) return
   void hubCall($, 'POST', `/sessions/${encodeURIComponent(id)}/state`, { busy }).catch(() => undefined)
+}
+
+export type Mic = 'on' | 'paused' | 'not connected'
+
+// One plain word for the status line: Talking, Listening (your voice is coming in, or "Hey Claude"
+// is waiting for the rest), Processing (being transcribed), Waiting, Mic off or Not connected.
+export function micStatus(m: Mic, c: string): string {
+  if (c === 'talking') return 'Talking'
+  if (m === 'paused') return 'Mic off'
+  if (m === 'not connected') return 'Not connected'
+  if (c === 'listening') return 'Listening'
+  if (c === 'processing') return 'Processing'
+  return 'Waiting'
+}
+
+function showMic($: EngineInterface): void {
+  $.ui.status(micStatus(mic, cue))
 }
 
 async function deliverHeard($: EngineInterface, text: string): Promise<void> {
@@ -136,7 +158,11 @@ async function handleLine($: EngineInterface, line: string): Promise<void> {
     wantCoordinator = role === 'coordinator'
     $.ui.toast(`interccom: this session is now a ${role}${msg.reason ? ` (${String(msg.reason).slice(0, 100)})` : ''}.`)
   } else if (msg.type === 'mic') {
-    $.ui.status(`mic: ${String(msg.state ?? '')}`)
+    mic = msg.state === 'listening' ? 'on' : msg.reason === 'paused' ? 'paused' : 'not connected'
+    showMic($)
+  } else if (msg.type === 'cue') {
+    cue = String(msg.state ?? 'waiting')
+    showMic($)
   } else if (msg.type === 'error') {
     toastError($, String(msg.message ?? 'unknown error'))
   }
@@ -178,7 +204,7 @@ export function startLink($: EngineInterface, opts: Record<string, unknown>, cwd
   stopLink()
   const mine = ++generation
   linkedAt = 0
-  const argv = ['node', `${$.plugin.root}/hub/connect.mjs`, '--name', baseName(cwd), '--cwd', cwd, '--pid', '0']
+  const argv = ['node', `${$.plugin.root}/hub/connect.mjs`, '--name', chosenName || baseName(cwd), '--cwd', cwd, '--pid', '0']
   // cwd is the plugin's own folder: on Windows a bare `node` is looked up in the cwd first.
   const stream = $.process.spawn({ argv, cwd: $.plugin.root, env: linkEnv(opts) })
   stopStream = () => { void stream.return?.(undefined as never) }

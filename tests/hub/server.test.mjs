@@ -66,7 +66,7 @@ async function start(opts = {}) {
       headers: { 'x-interccom-token': TOKEN },
       signal: ac.signal,
     })
-    // raw: every line. lines: without keepalive and mic-state lines, so tests can count events.
+    // raw: every line. lines: without keepalive, mic-state and cue lines, so tests can count events.
     const s = { raw: [], lines: [], waiters: [], abort: () => ac.abort() }
     streams.push(s)
     const reader = res.body.getReader()
@@ -85,7 +85,7 @@ async function start(opts = {}) {
             if (line.trim()) {
               const msg = JSON.parse(line)
               s.raw.push(msg)
-              if (msg.type !== 'ping' && msg.type !== 'mic') s.lines.push(msg)
+              if (msg.type !== 'ping' && msg.type !== 'mic' && msg.type !== 'cue') s.lines.push(msg)
             }
             s.waiters.splice(0).forEach(w => w())
           }
@@ -286,6 +286,71 @@ test('bare wake word arms the next utterance', async () => {
   await hub.hear('not for you')
   await tick()
   assert.equal(s.lines.length, 2)
+})
+
+const cues = s => s.raw.filter(m => m.type === 'cue')
+
+test('chimes: one when "Hey Claude" is caught, one when your words reach a session; none for unaddressed speech', async () => {
+  const audio = fakeAudio()
+  audio.chimes = []
+  audio.chime = name => audio.chimes.push(name)
+  const { hub, register, open } = await start({ audio })
+  const s = await open((await register('session 3')).sessionId)
+  await hub.hear('just people talking')
+  assert.deepEqual(audio.chimes, [])
+  await hub.hear('hey claude')
+  assert.deepEqual(audio.chimes, ['armed'])
+  await hub.hear('session three, do the thing')
+  assert.deepEqual(audio.chimes, ['armed', 'sent'])
+  assert.deepEqual(await s.line(1), { type: 'heard', text: 'do the thing' })
+  assert.deepEqual(audio.played, [], 'chimes never go through the talk queue')
+})
+
+test('the cue every session sees: listening while you speak or after "Hey Claude", processing while transcribing, talking, waiting', async () => {
+  const g = gate()
+  const audio = fakeAudio(g)
+  const { hub, call, register, open } = await start({ audio })
+  const { sessionId } = await register('api')
+  const s = await open(sessionId)
+  const other = await open((await register('web')).sessionId)
+  const states = () => cues(s).map(c => c.state)
+  // The listener's order: speech starts, the utterance ends and goes to STT, then the voice stops.
+  hub.speaking(true)
+  hub.transcribing(1)
+  hub.speaking(false)
+  hub.speaking(true) // talking again while the last bit is still being transcribed
+  hub.transcribing(1)
+  hub.speaking(false)
+  hub.transcribing(-1)
+  hub.transcribing(-1)
+  await waitFor(() => states().length === 5)
+  assert.deepEqual(states(), ['listening', 'processing', 'listening', 'processing', 'waiting'])
+  await hub.hear('hey claude')
+  await waitFor(() => states().length === 6)
+  assert.equal(states()[5], 'listening')
+  await hub.hear('do it')
+  await waitFor(() => states().length === 7)
+  assert.equal(states()[6], 'waiting')
+  await call('POST', '/speak', { sessionId, text: 'hello', priority: 'status' })
+  await waitFor(() => states().length === 8)
+  assert.equal(states()[7], 'talking')
+  g.open()
+  await waitFor(() => states().length === 9)
+  assert.equal(states()[8], 'waiting')
+  await waitFor(() => cues(other).length === 9)
+  assert.deepEqual(cues(other), cues(s))
+})
+
+test('"Hey Claude" alone stays listening only for its window', async () => {
+  let t = 1000
+  const { hub, register, open } = await start({ now: () => t })
+  const s = await open((await register('api')).sessionId)
+  await hub.hear('hey claude')
+  await waitFor(() => cues(s).length === 1)
+  assert.equal(cues(s)[0].state, 'listening')
+  t += 20_000
+  await waitFor(() => cues(s).length === 2, 12_000)
+  assert.equal(cues(s)[1].state, 'waiting')
 })
 
 test('stop flushes non-questions and aborts playback', async () => {

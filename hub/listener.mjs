@@ -13,7 +13,7 @@ const NO_MIC = 'No microphone found. Plug one in, or set INTERCCOM_MIC to its na
 
 export function startListener({
   mic, spawn = realSpawn, vad, isMuted, onUtterance, onError, backoffMs = [2000, 30000],
-  captureArgv = platformCapture,
+  captureArgv = platformCapture, onSpeaking = () => {}, onLive = () => {},
 }) {
   const [minBackoff, maxBackoff] = backoffMs
   let child = null
@@ -23,11 +23,18 @@ export function startListener({
   let pending = Buffer.alloc(0)
   let wasMuted = false
   let firstDataAt = 0
+  let speaking = false
+
+  function setSpeaking(on) {
+    if (on === speaking) return
+    speaking = on
+    onSpeaking(on)
+  }
 
   function onData(chunk) {
     // Only a mic that has kept producing audio for a while counts as healthy.
     const t = Date.now()
-    if (!firstDataAt) firstDataAt = t
+    if (!firstDataAt) { firstDataAt = t; onLive() }
     else if (t - firstDataAt >= HEALTHY_MS) delay = minBackoff
     pending = pending.length ? Buffer.concat([pending, chunk]) : chunk
     let off = 0
@@ -42,11 +49,13 @@ export function startListener({
       const pcm = vad.push(frame)
       if (pcm) onUtterance(pcm)
     }
+    setSpeaking(Boolean(vad.active?.()))
     pending = Buffer.from(pending.subarray(off))
   }
 
   function fail(message) {
     if (stopped) return
+    setSpeaking(false)
     onError(message)
     timer = setTimeout(() => { timer = null; launch() }, delay)
     timer.unref?.()
@@ -86,6 +95,7 @@ export function startListener({
   return {
     stop() {
       stopped = true
+      setSpeaking(false)
       if (timer) { clearTimeout(timer); timer = null }
       child?.kill()
       child = null
@@ -117,17 +127,20 @@ export function createListenerManager({
   function onUtterance(pcm) {
     if (inFlight >= MAX_IN_FLIGHT) { hub.reportError(DROPPED); return }
     inFlight++
+    hub.transcribing?.(1)
     const gen = generation
     const result = transcribe(pcm).then(text => ({ text }), error => ({ error }))
     chain = chain.then(async () => {
       const { text, error } = await result
       inFlight--
-      if (gen !== generation) return
       try {
+        if (gen !== generation) return
         if (error) hub.reportError(error)
         else if (text) await hub.hear(text)
       } catch (err) {
         hub.reportError(err)
+      } finally {
+        hub.transcribing?.(-1)
       }
     })
   }
@@ -145,7 +158,8 @@ export function createListenerManager({
     if (!want) {
       if (running) {
         halt()
-        hub.broadcast({ type: 'mic', state: 'off' })
+        // Off on purpose (/listen off) reads differently from a mic that doesn't work.
+        hub.broadcast({ type: 'mic', state: 'off', ...(cfg.listenMode === 'off' ? { reason: 'paused' } : {}) })
       }
       return
     }
@@ -162,9 +176,11 @@ export function createListenerManager({
       // Echo guard: deaf while audio plays (by design for v1), so spoken "stop" works only between utterances.
       isMuted: () => hub.isPlaying() || Date.now() < hub.mutedUntil(),
       onUtterance,
-      onError: msg => hub.reportError(msg),
+      onError: msg => { hub.broadcast({ type: 'mic', state: 'off' }); hub.reportError(msg) },
+      onSpeaking: on => hub.speaking?.(on),
+      // Listening only once audio actually arrives: a mic that fails to start is "not connected".
+      onLive: () => hub.broadcast({ type: 'mic', state: 'listening', name: mic }),
     })
-    hub.broadcast({ type: 'mic', state: 'listening', name: mic })
   }
 
   return {

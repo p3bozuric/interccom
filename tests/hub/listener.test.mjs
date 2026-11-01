@@ -59,6 +59,19 @@ test('spawns ffmpeg capture with a safe cwd and hidden window', () => {
   l.stop()
 })
 
+test('says when audio first arrives, and when a voice starts and stops, before the utterance is handed over', async () => {
+  const events = []
+  const { sp, l } = setup({
+    onLive: () => events.push('live'),
+    onSpeaking: on => events.push(on ? 'speaking' : 'quiet'),
+    onUtterance: () => events.push('utterance'),
+  })
+  for (const f of utteranceFrames()) sp.children[0].stdout.write(f)
+  await flush()
+  assert.deepEqual(events, ['live', 'speaking', 'utterance', 'quiet'])
+  l.stop()
+})
+
 test('emits utterance from VAD, even when chunks do not align with frames', async () => {
   const { sp, l, utterances } = setup()
   const all = Buffer.concat(utteranceFrames())
@@ -225,7 +238,11 @@ test('manager starts on the first mic when mode is on and a key exists', () => {
   m.sync()
   assert.equal(started.length, 1)
   assert.equal(started[0].mic, 'Mic A')
+  assert.deepEqual(hub.broadcasts, [], 'not listening until audio arrives')
+  started[0].onLive()
   assert.deepEqual(hub.broadcasts, [{ type: 'mic', state: 'listening', name: 'Mic A' }])
+  started[0].onError('Microphone capture stopped')
+  assert.deepEqual(hub.broadcasts.at(-1), { type: 'mic', state: 'off' })
   m.sync()
   assert.equal(started.length, 1)
 })
@@ -260,7 +277,7 @@ test('config changes start and stop the listener', () => {
   assert.equal(started.length, 1)
   hub.change({ listenMode: 'off' })
   assert.deepEqual(stopped, ['Mic A'])
-  assert.deepEqual(hub.broadcasts.at(-1), { type: 'mic', state: 'off' })
+  assert.deepEqual(hub.broadcasts.at(-1), { type: 'mic', state: 'off', reason: 'paused' })
   hub.change({ listenMode: 'wake' })
   assert.equal(started.length, 2)
 })

@@ -100,6 +100,9 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
   let micName = ''
   let lastMicError = ''
   let idleTimer = null
+  let armTimer = null
+  const voice = { playing: false, speaking: false, transcribing: 0 }
+  let lastCue = 'waiting'
   const tokenBuf = Buffer.from(String(token))
 
   const player = createPlayer({
@@ -107,6 +110,7 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
     getConfig: () => ({ ...config }),
     onError: err => reportError(err),
     boardSize: () => board.size,
+    onPlaying: playing => { voice.playing = playing; refreshCue() },
   })
 
   function send(res, obj) {
@@ -116,6 +120,35 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
   function broadcast(obj) {
     if (obj?.type === 'mic') { micState = obj.state; micName = obj.name ?? micName; if (obj.state === 'listening') lastMicError = '' }
     for (const res of streams.values()) send(res, obj)
+  }
+
+  // What the person should know about being heard, in one word, sent to every session when it
+  // changes: talking (the mic is deaf), listening (their voice is coming in, or "Hey Claude" is
+  // waiting for the rest), processing (speech is being transcribed) or waiting.
+  function cueState() {
+    if (voice.playing) return 'talking'
+    if (voice.speaking || armedUntil > now()) return 'listening'
+    if (voice.transcribing > 0) return 'processing'
+    return 'waiting'
+  }
+
+  function refreshCue() {
+    const state = cueState()
+    if (state === lastCue) return
+    lastCue = state
+    broadcast({ type: 'cue', state })
+  }
+
+  function arm(until) {
+    armedUntil = until
+    clearTimeout(armTimer)
+    armTimer = null
+    const ms = until - now()
+    if (ms > 0) {
+      armTimer = setTimeout(() => { armTimer = null; refreshCue() }, ms)
+      armTimer.unref?.()
+    }
+    refreshCue()
   }
 
   function reportError(err) {
@@ -154,7 +187,7 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
   }
 
   function stop() {
-    armedUntil = 0
+    arm(0)
     const flushed = queue.flush()
     player.stop()
     return flushed
@@ -174,21 +207,29 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
       armedUntil,
       now: now(),
     })
-    if (r.kind === 'arm') { armedUntil = r.until; return }
+    if (r.kind === 'arm') {
+      audio.chime?.('armed')
+      arm(r.until)
+      return
+    }
     if (r.kind === 'stop') { stop(); return }
     if (r.kind !== 'deliver') return
-    armedUntil = 0
+    arm(0)
     if (coord) {
       // The coordinator hears everything; a name after the wake word is a hint, and it does the routing.
       board.markActive(coord.sessionId, now())
       recentHeard.push({ at: now(), norm: normWords(r.text) })
       if (recentHeard.length > MAX_RECENT) recentHeard.shift()
       send(streams.get(coord.sessionId), { type: 'heard', text: r.text, ...(r.name !== undefined ? { addressed: r.name } : {}) })
+      audio.chime?.('sent')
       return
     }
     const target = (r.name !== undefined && board.byName(r.name)) || board.defaultTarget()
     // Whoever you just spoke to is the one you're working with now.
-    if (target && deliverHeard(target, r.text)) board.markActive(target.sessionId, now())
+    if (target && deliverHeard(target, r.text)) {
+      board.markActive(target.sessionId, now())
+      audio.chime?.('sent')
+    }
   }
 
   // Heard speech to one session, however its host takes it. False when it couldn't be delivered.
@@ -506,5 +547,8 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
     onConfigChange: cb => { configListeners.push(cb) },
     isPlaying: () => player.isPlaying(),
     mutedUntil: () => player.mutedUntil(),
+    // From the listener: the person's voice started or stopped; a transcription started (+1) or ended (-1).
+    speaking: on => { voice.speaking = Boolean(on); refreshCue() },
+    transcribing: delta => { voice.transcribing = Math.max(0, voice.transcribing + delta); refreshCue() },
   }
 }
