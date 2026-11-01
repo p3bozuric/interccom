@@ -85,6 +85,17 @@ export async function deliverReports($: EngineInterface, text: string | undefine
   if (text) await submitReport($, text)
 }
 
+async function claimName($: EngineInterface, wanted: string): Promise<void> {
+  const id = link?.sessionId
+  if (!id) return
+  try {
+    const out = (await hubCall($, 'POST', `/sessions/${encodeURIComponent(id)}/name`, { name: wanted })) as { name?: unknown }
+    setLinkName(String(out.name ?? wanted))
+  } catch (err) {
+    toastError($, `couldn't use the session's name (${String((err as Error)?.message ?? err).slice(0, 120)})`)
+  }
+}
+
 export function setLinkName(name: string): void {
   chosenName = name
   if (link) link = { ...link, name }
@@ -141,6 +152,8 @@ async function handleLine($: EngineInterface, line: string): Promise<void> {
     linkedAt = Date.now()
     // A new registration starts idle, as a worker, on the hub: bring it up to date.
     reportBusy($, delivery.isBusy())
+    // A name chosen while the link was starting (the session's title arrives at about the same time).
+    if (chosenName && chosenName !== link.name) await claimName($, chosenName)
     role = 'worker'
     if (wantCoordinator) await reclaimRole($)
     if (!setupChecked) { setupChecked = true; void firstRunCheck($) }
