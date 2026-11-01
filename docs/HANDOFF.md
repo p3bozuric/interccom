@@ -107,6 +107,6 @@ The full list is in testing-locally.md §8.
   - other agents (Aider, Cursor CLI, …);
   - a coordinator in agents other than Claude Code;
   - a local wake-word/VAD model;
-  - a plugin icon;
+
   - `npm publish`.
 - Design and plans: `docs/superpowers/specs/` (original design, other agents) and `docs/superpowers/plans/`.
