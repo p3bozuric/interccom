@@ -201,7 +201,7 @@ export const register: Register = (on, opts) => {
           decision: { type: 'string', description: 'Coordinator only: one plain sentence describing a decision you made without the person.' },
           relay: {
             type: 'object',
-            description: "Coordinator only: pass the person's own recent words, quoted exactly, to a session SendMessage can't reach (Codex and other non-Claude agents).",
+            description: "Coordinator only: pass the person's own recent words, quoted exactly, to a session by its interccom name: Codex and other non-Claude agents, or a Claude session ListAgents doesn't clearly show.",
             properties: { to: { type: 'string', description: 'Session name.' }, quote: { type: 'string', description: 'The exact words the person said.' } },
             required: ['to', 'quote'],
           },
