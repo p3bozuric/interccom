@@ -2,7 +2,7 @@ import type { Register, EngineInterface, RenderElement } from 'claude-code'
 import { guidance, coordinatorGuidance, normalizeAutonomy } from './guidance.ts'
 import {
   startLink, hubCall, currentLink, setLinkName, reportBusy, delivery, voiceTag,
-  currentRole, requestRole, deliverReports, isTalking, isMicPaused, isMicOn, currentStatus,
+  currentRole, requestRole, deliverReports, isTalking, isMicPaused, isMicOn, currentStatus, linkReady,
 } from './hub-link.ts'
 import { rememberCheck, takeEligible, askByVoice } from './approvals.ts'
 import { boardText, type BoardData } from './board-view.ts'
@@ -99,12 +99,12 @@ async function interccomCommand($: EngineInterface, args: string): Promise<{ tex
   if (sub.toLowerCase() === 'name') {
     const wanted = rest.join(' ').trim()
     if (!wanted) return usage
-    if (!currentLink()) return { text: 'interccom is not connected to the hub yet; try again in a moment.' }
+    if (!(await linkReady($))) return { text: 'interccom is not connected to the hub yet; try again in a moment.' }
     return { text: `This session is now called ${await renameSession($, wanted)}.` }
   }
   if (sub.toLowerCase() === 'setup') {
     if ((rest[0] ?? '').toLowerCase() === 'test') {
-      const id = currentLink()?.sessionId
+      const id = (await linkReady($))?.sessionId
       if (!id) return { text: 'interccom is not connected to the hub yet; try again in a moment.' }
       await hubCall($, 'POST', '/setup/test', { sessionId: id })
       return { text: 'Playing a test line. Then say "Hey Claude, testing" to check listening.' }
