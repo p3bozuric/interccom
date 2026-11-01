@@ -72,6 +72,9 @@ function readJson(req) {
 
 export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 30_000, onIdleExit = () => {}, startPaused = false, streamGraceMs = 15_000, pingMs = 30_000, debugHear = false,
   hostSubmit = async ({ host }) => { throw new Error(`interccom can't start a turn in ${host} sessions`) },
+  // Pull hosts whose idle sessions hostSubmit can start a turn in; the others get speech with
+  // the person's next message there.
+  idleSubmitHosts = ['codex'],
   checkMachine = async () => ({}),
 }) {
   const board = new Board()
@@ -297,7 +300,10 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
     }
     row.inbox.push(text)
     if (row.inbox.length > MAX_INBOX) row.inbox.shift()
-    if (!row.busy && row.hostSessionId) submitIdle(row)
+    if (!row.busy && row.hostSessionId) {
+      if (idleSubmitHosts.includes(row.host)) submitIdle(row)
+      else reportError(`${row.name} is idle, so it will hear this with your next message there.`)
+    }
     return true
   }
 

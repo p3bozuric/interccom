@@ -42,7 +42,7 @@ test('local stt posts multipart to {url}/audio/transcriptions, language unless a
 test('local errors name the cause: unreachable, 404 path, bad URL, other status', async () => {
   const down = async () => { throw new TypeError('fetch failed') }
   await assert.rejects(local.tts('a', { url: 'http://127.0.0.1:1/v1', fetch: down }),
-    e => e instanceof EngineError && e.code === 'network' && /Couldn't reach the local speech server .*server is running/.test(e.message))
+    e => e instanceof EngineError && e.code === 'network' && /Couldn't reach the local speech server .*that it is running/.test(e.message))
   await assert.rejects(local.stt(Buffer.from('w'), { url: 'http://h/v1', model: 'm', fetch: fakeFetch(new Response('no', { status: 404 })) }),
     e => e.code === 'config' && /\/v1\/audio\/transcriptions/.test(e.message))
   // Speaches' own answer for a model it hasn't downloaded (seen live with speaches:latest-cpu).

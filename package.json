@@ -1,6 +1,6 @@
 {
   "name": "interccom",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "One voice for all your coding agents (Claude Code, Codex, GitHub Copilot CLI, OpenCode): hear conclusions and questions, talk back hands-free.",
   "license": "MIT",
   "type": "module",

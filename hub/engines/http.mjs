@@ -9,7 +9,9 @@ export async function providerFetch(url, init, { label, keySetting, fetch: fetch
     res = await fetchFn(url, { ...init, signal: AbortSignal.timeout(timeoutMs) })
   } catch (err) {
     if (err?.name === 'TimeoutError') throw new EngineError('network', `${label} didn't answer in time (${url}).`)
-    throw new EngineError('network', `Couldn't reach ${label} at ${url}. Check your connection${keySetting ? '' : ', and that the server is running'}.`)
+    throw new EngineError('network', keySetting
+      ? `Couldn't reach ${label} at ${url}. Check your connection.`
+      : `Couldn't reach ${label} at ${url}. Check that it is running.`)
   }
   if (res.ok) return res
   const body = (await res.text().catch(() => '')).slice(0, 200)

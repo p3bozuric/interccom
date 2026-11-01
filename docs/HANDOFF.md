@@ -35,6 +35,7 @@ Then work through [docs/testing-locally.md](testing-locally.md) in order and rec
   - a fix for the Windows exit crash.
 - Coordinator reports now go as the plugin's message, because the API has no `asUser: false`.
 - **0.5.0: permission prompts by voice** ([as built](superpowers/plans/2026-11-01-interccom-3-voice-approvals.md)). Whether the dialog and the voice wait really run side by side is still to check on a real machine (testing-locally.md 3b, 8.12).
+- **0.6.0: Gemini CLI** through its hooks and an extension that `interccom gemini-setup` writes, loaded with `gemini extensions link`. Speech heard while Gemini is idle waits for the person's next message there; Gemini has nothing like `codex queue`. Not yet run against real Gemini (testing-locally.md 7g).
 
 ## How it fits together
 
@@ -59,6 +60,7 @@ How each agent receives what you say:
 | Codex | pull (hub inbox, hooks) | PostToolUse `additionalContext`, Stop `block` | `codex queue --resume` |
 | Copilot CLI | push | `onPostToolUse` `additionalContext` | `session.send` |
 | OpenCode | push | appended in `tool.execute.after` | `client.session.promptAsync` |
+| Gemini CLI | pull (hub inbox, hooks) | AfterTool `additionalContext`, AfterAgent `deny` + reason | with the next message (BeforeAgent `additionalContext`) |
 | Other MCP agents | none | — | — (speak only) |
 
 Only Claude Code sessions can be the coordinator (the role relies on SendMessage).
@@ -102,9 +104,9 @@ The full list is in testing-locally.md §8.
 - Saying "stop" doesn't interrupt audio while it plays: the mic is deaf during playback, by design.
 - Hooks-module types (`claude-code`) weren't available in the cloud, so the TypeScript in `hooks/` has never been type-checked. The validator accepts it.
 - Next on the roadmap:
-  - Gemini CLI and other agents;
+  - other agents (Aider, Cursor CLI, …);
   - a coordinator in agents other than Claude Code;
   - a local wake-word/VAD model;
-  - a plugin icon;
+
   - `npm publish`.
 - Design and plans: `docs/superpowers/specs/` (original design, other agents) and `docs/superpowers/plans/`.

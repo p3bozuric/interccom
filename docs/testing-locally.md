@@ -311,6 +311,26 @@ opencode                                                     # start in a projec
 | 7.35 | Ask OpenCode to use a subagent, and speak while it runs | The speech goes to your main session, never to the subagent. |
 | 7.36 | Two OpenCode windows on the same project, then switch between them | Speech goes to the session you last sent a message in. Record whether that holds across windows: each `opencode` process has its own plugin instance. |
 
+## 7g. Gemini CLI
+
+You need Gemini CLI with hooks, signed in. Nothing here has run against real Gemini yet: the hook formats come from its docs (geminicli.com/docs/hooks), and the hub side is tested with Gemini-shaped hook input.
+
+```powershell
+node C:path	ointerccomhubcli.mjs gemini-setup     # writes ~/.interccom/gemini/interccom
+gemini extensions link "$env:USERPROFILE.interccomgeminiinterccom"
+gemini                                                  # start in a project folder
+```
+
+| # | Do | Expect |
+|---|---|---|
+| 7.37 | Start `gemini` | `Get-Board` shows `host: gemini`, named after the folder. `/extensions` lists interccom; `/mcp` shows its `speak` and `board` tools. Gemini may ask to trust the hooks. |
+| 7.38 | Ask: "What does interccom ask you to do?" | It describes the speaking guidance (SessionStart context). |
+| 7.39 | "Say out loud what this project is." | It calls `speak`; you hear one short line. |
+| 7.40 | Long task, then "Hey Claude, also check the README" mid-task | It takes it in at the next tool step (AfterTool context). |
+| 7.41 | Speak as a turn ends | The turn goes on with it (AfterAgent deny + reason). **Record how Gemini shows that.** |
+| 7.42 | Idle: speak | A toast: "<name> is idle, so it will hear this with your next message there." Your next typed message carries it. |
+| 7.43 | `interccom gemini-setup --remove`, `gemini extensions uninstall interccom` | Gone. |
+
 ## 8. Things that couldn't be verified in the cloud: check them
 
 These are assumptions about Claude Code's plugin API that only a real session can confirm.

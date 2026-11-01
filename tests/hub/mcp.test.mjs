@@ -7,7 +7,7 @@ import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { createHub } from '../../hub/server.mjs'
 import { createHostLink, handleMessage, callTool, TOOLS, PROTOCOL_VERSIONS } from '../../hub/mcp.mjs'
-import { codexHook } from '../../hub/codex-hook.mjs'
+import { codexHook, geminiHook } from '../../hub/codex-hook.mjs'
 import { codexSetupText } from '../../hub/cli.mjs'
 
 const TOKEN = 'tok'
@@ -161,7 +161,7 @@ test('codexHook stays silent: bad JSON, unknown events, no hub, hub errors', asy
 
 test('a generic MCP host is speak-only and gets instructions without a tag', async () => {
   const { port } = await liveHub()
-  const link = linkTo(port, { host: 'gemini' })
+  const link = linkTo(port, { host: 'aider' })
   await link.start()
   assert.equal(link.delivery, 'none')
   assert.equal(link.tag, '')
@@ -213,4 +213,48 @@ test('codex-setup prints a TOML MCP entry and a hooks.json for all four events, 
   const json = JSON.parse(txt.slice(txt.indexOf('{\n'), txt.lastIndexOf('}') + 1))
   assert.deepEqual(Object.keys(json.hooks), ['SessionStart', 'UserPromptSubmit', 'PostToolUse', 'Stop'])
   assert.equal(json.hooks.Stop[0].hooks[0].command, '"C:\\Program Files\\nodejs\\node.exe" "C:\\x y\\hub\\cli.mjs" codex-hook')
+})
+
+test("gemini link: a pull session hearing through Gemini's hooks; idle speech waits for the next prompt", async () => {
+  const { hub, port, submitted } = await liveHub()
+  const errors = []
+  const link = linkTo(port, { host: 'gemini', name: 'gm', cwd: '/w/gm' })
+  await link.start()
+  assert.equal(link.delivery, 'pull')
+  const find = async () => ({ port, token: TOKEN })
+  const hook = (hook_event_name, extra = {}) =>
+    geminiHook(JSON.stringify({ hook_event_name, session_id: 'g-1', cwd: '/w/gm', ...extra }), { find })
+  const start = JSON.parse(await hook('SessionStart', { source: 'startup' }))
+  assert.equal(start.hookSpecificOutput.hookEventName, 'SessionStart')
+  assert.ok(start.hookSpecificOutput.additionalContext.includes(`[interccom:${link.tag}]`))
+
+  assert.equal(await hook('BeforeAgent', { prompt: 'hi' }), '{}')
+  await hub.hear('Hey Claude, use the staging database')
+  const mid = JSON.parse(await hook('AfterTool', { tool_name: 'run_shell_command' }))
+  assert.match(mid.hookSpecificOutput.additionalContext, /\["use the staging database"\]$/)
+  assert.equal(await hook('AfterAgent', { stop_hook_active: false }), '{}')
+
+  // Speech at the end of a turn keeps it going.
+  await hook('BeforeAgent', { prompt: 'go' })
+  await hub.hear('Hey Claude, and update the README')
+  const end = JSON.parse(await hook('AfterAgent', { stop_hook_active: false }))
+  assert.equal(end.decision, 'deny')
+  assert.match(end.reason, /update the README/)
+
+  // Idle: Gemini can't be started from outside, so it waits for the person's next message.
+  await hook('AfterAgent', { stop_hook_active: true })
+  await hub.hear('Hey Claude, what changed?')
+  await new Promise(r => setTimeout(r, 50))
+  assert.deepEqual(submitted, [])
+  const next = JSON.parse(await hook('BeforeAgent', { prompt: 'continue' }))
+  assert.match(next.hookSpecificOutput.additionalContext, /what changed\?/)
+  void errors
+})
+
+test('geminiHook always prints JSON: {} when there is nothing to say or no hub', async () => {
+  const find = async () => ({ port: 1, token: 'x' })
+  assert.equal(await geminiHook('not json', { find }), '{}')
+  assert.equal(await geminiHook(JSON.stringify({ hook_event_name: 'BeforeTool', session_id: 's' }), { find }), '{}')
+  assert.equal(await geminiHook(JSON.stringify({ hook_event_name: 'AfterAgent', session_id: 's' }), { find: async () => null }), '{}')
+  assert.equal(await geminiHook(JSON.stringify({ hook_event_name: 'AfterTool', session_id: 's' }), { find }), '{}')
 })

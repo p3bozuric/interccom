@@ -42,10 +42,17 @@ export function currentRole(): Role {
   return role
 }
 
+// A command given as the session opens (claude "/interccom coordinator") can run before the
+// link is up: wait for it a few seconds rather than fail.
+export async function linkReady($: EngineInterface, ms = 8000): Promise<Link | undefined> {
+  for (let waited = 0; !link && waited < ms; waited += 250) await $.clock.sleep(250)
+  return link
+}
+
 // Ask the hub for a role. Throws the hub's refusal (another coordinator) so the command can show it.
 export async function requestRole($: EngineInterface, wanted: Role, takeover: boolean): Promise<Role> {
-  const id = link?.sessionId
-  if (!id) throw new Error('interccom is not connected to the hub yet; try again in a moment.')
+  const id = (await linkReady($))?.sessionId
+  if (!id) throw new Error('not connected to the hub yet; try again in a moment.')
   await hubCall($, 'POST', `/sessions/${encodeURIComponent(id)}/role`, { role: wanted, takeover })
   role = wanted
   wantCoordinator = wanted === 'coordinator'
@@ -247,8 +254,19 @@ export function stopLink(): void {
   link = undefined
 }
 
+// The hub said no: its status and its own words, for a command to show as they are.
+export class HubRefusal extends Error {
+  readonly status: number
+  readonly reason: string
+  constructor(status: number, reason: string, what: string) {
+    super(`interccom hub refused ${what}: ${status}${reason ? ` ${reason}` : ''}`)
+    this.status = status
+    this.reason = reason
+  }
+}
+
 export async function hubCall($: EngineInterface, method: string, path: string, body?: unknown): Promise<unknown> {
-  if (!link) throw new Error('interccom is not connected to the hub yet; try again in a moment.')
+  if (!link) throw new Error('not connected to the hub yet; try again in a moment.')
   const res = await $.http.fetch(`http://127.0.0.1:${link.port}${path}`, {
     method,
     headers: { 'x-interccom-token': link.token, 'content-type': 'application/json' },
@@ -258,7 +276,7 @@ export async function hubCall($: EngineInterface, method: string, path: string, 
   try { parsed = res.text ? JSON.parse(res.text) : {} } catch { parsed = undefined }
   if (!res.ok) {
     const reason = (parsed as { error?: unknown } | undefined)?.error
-    throw new Error(`interccom hub refused ${method} ${path}: ${res.status}${reason ? ` ${String(reason)}` : ''}`)
+    throw new HubRefusal(res.status, reason ? String(reason) : '', `${method} ${path}`)
   }
   return parsed
 }
