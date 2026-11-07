@@ -889,3 +889,60 @@ test('approvals: the coordinator never gets the answer; a closed session cancels
   assert.equal((await h.call('GET', `/approvals/${r2.id}`)).json.status, 'cancelled')
   void ws
 })
+
+test('the voice level reaches every session only while the person speaks, at most every 120 ms', async () => {
+  let t = 1000
+  const { hub, register, open } = await start({ now: () => t })
+  const s = await open((await register('api')).sessionId)
+  const levels = () => s.raw.filter(m => m.type === 'level').map(m => m.v)
+  hub.level(0.5)
+  hub.speaking(true)
+  await waitFor(() => cues(s).some(c => c.speaking === true))
+  hub.level(0.3333)
+  hub.level(0.9) // within 120 ms of the last: dropped
+  t += 150
+  hub.level(2) // clamped
+  await waitFor(() => levels().length === 2)
+  assert.deepEqual(levels(), [0.33, 1])
+  hub.speaking(false)
+  await waitFor(() => cues(s).at(-1).speaking === false)
+  t += 150
+  hub.level(0.5)
+  await tick()
+  assert.equal(levels().length, 2)
+})
+
+test('turning interccom off: no speech, no hearing, no voice approvals, mic off; on brings it back', async () => {
+  const { hub, call, register, open } = await start()
+  const { sessionId } = await register('api')
+  const s = await open(sessionId)
+  const seen = []
+  hub.onConfigChange(c => seen.push(c.listenMode))
+  assert.equal((await call('POST', '/power', { on: 'no' })).status, 400)
+  assert.deepEqual((await call('POST', '/power', { on: false })).json, { on: false })
+  await waitFor(() => s.raw.some(m => m.type === 'power' && m.on === false))
+  assert.equal(hub.getConfig().listenMode, 'off')
+  assert.deepEqual(seen, ['off'])
+  assert.equal((await call('GET', '/board')).json.power, false)
+  assert.equal((await call('GET', '/board')).json.mode, 'wake', 'the chosen mode is kept for later')
+  assert.deepEqual((await call('POST', '/speak', { sessionId, text: 'hello' })).json, { queued: false, off: true })
+  assert.equal((await call('POST', '/approvals', { sessionId, tool: 'Bash', input: { command: 'ls' } })).status, 409)
+  await hub.hear('hey claude, api, do it')
+  await tick()
+  assert.equal(s.lines.filter(m => m.type === 'heard').length, 0)
+  // A session that connects while it's off is told so.
+  const late = await open((await register('web')).sessionId)
+  await waitFor(() => late.raw.some(m => m.type === 'power' && m.on === false))
+  await call('POST', '/power', { on: true })
+  await waitFor(() => s.raw.some(m => m.type === 'power' && m.on === true))
+  assert.equal(hub.getConfig().listenMode, 'wake')
+  assert.deepEqual((await call('POST', '/speak', { sessionId, text: 'hello' })).json.queued, true)
+})
+
+test('turning interccom off cancels open voice approvals', async () => {
+  const { call, register } = await start()
+  const { sessionId } = await register('api')
+  const { json: req } = await call('POST', '/approvals', { sessionId, tool: 'Bash', input: { command: 'npm test' } })
+  await call('POST', '/power', { on: false })
+  assert.equal((await call('GET', `/approvals/${req.id}`)).json.status, 'cancelled')
+})

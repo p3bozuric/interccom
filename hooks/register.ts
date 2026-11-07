@@ -3,6 +3,7 @@ import { guidance, coordinatorGuidance, normalizeAutonomy } from './guidance.ts'
 import {
   startLink, hubCall, currentLink, setLinkName, reportBusy, delivery, voiceTag,
   currentRole, requestRole, deliverReports, isTalking, isMicPaused, isMicOn, currentStatus, linkReady, HubRefusal,
+  isPowered, currentWave,
 } from './hub-link.ts'
 import { rememberCheck, takeEligible, askByVoice } from './approvals.ts'
 import { boardText, type BoardData } from './board-view.ts'
@@ -59,6 +60,11 @@ async function stopTalking($: EngineInterface): Promise<number> {
   return Number(out.flushed ?? 0)
 }
 
+// interccom on/off for every session: off means no listening, no speech, no voice approvals.
+async function setPower($: EngineInterface, on: boolean): Promise<void> {
+  await hubCall($, 'POST', '/power', { on })
+}
+
 let resumeMode: 'wake' | 'always' = 'wake' // what "Mic on" goes back to
 
 // Mic off is /listen off; Mic on goes back to the mode it had (wake unless it was always).
@@ -93,7 +99,7 @@ async function followTitle($: EngineInterface, title: unknown): Promise<void> {
 }
 
 async function interccomCommand($: EngineInterface, args: string): Promise<{ text: string }> {
-  const usage = { text: 'Usage: /interccom setup [test] | name <name> | status | stop | coordinator [take] | worker' }
+  const usage = { text: 'Usage: /interccom setup [test] | name <name> | status | stop | on | off | coordinator [take] | worker' }
   const trimmed = args.trim()
   const [sub = '', ...rest] = trimmed.split(/\s+/)
   if (sub.toLowerCase() === 'name') {
@@ -137,6 +143,12 @@ async function interccomCommand($: EngineInterface, args: string): Promise<{ tex
   }
   if (sub.toLowerCase() === 'stop') {
     return { text: `Stopped. Cleared ${await stopTalking($)} queued updates.` }
+  }
+  if (sub.toLowerCase() === 'off' || sub.toLowerCase() === 'on') {
+    const on = sub.toLowerCase() === 'on'
+    if (!(await linkReady($))) return { text: 'interccom is not connected to the hub yet; try again in a moment.' }
+    await setPower($, on)
+    return { text: on ? 'interccom is on: listening and speaking again.' : 'interccom is off for every session: no listening, no speech. /interccom on, or Turn on above the prompt, brings it back.' }
   }
   return usage
 }
@@ -217,8 +229,8 @@ export const register: Register = (on, opts) => {
     })
     await $.command.register({
       name: 'interccom',
-      description: 'interccom: check the speech setup, rename this session, list every session, stop playback, or make this session the coordinator.',
-      argumentHint: 'setup [test] | name <name> | status | stop | coordinator [take] | worker',
+      description: 'interccom: check the speech setup, rename this session, list every session, stop playback, switch interccom on or off, or make this session the coordinator.',
+      argumentHint: 'setup [test] | name <name> | status | stop | on | off | coordinator [take] | worker',
       immediate: true,
     })
     startLink($, options, e.cwd)
@@ -272,7 +284,8 @@ export const register: Register = (on, opts) => {
     const priority: Priority = PRIORITIES.includes(raw as Priority) ? (raw as Priority) : 'status'
     const id = currentLink()?.sessionId
     if (!id) return { result: 'interccom is not connected to the hub yet; nothing played.' }
-    const out = (await hubCall($, 'POST', '/speak', { sessionId: id, text, priority })) as { queued?: unknown }
+    const out = (await hubCall($, 'POST', '/speak', { sessionId: id, text, priority })) as { queued?: unknown; off?: unknown }
+    if (out.off) return { result: 'interccom is switched off; nothing played. Answer in text.' }
     return { result: out.queued ? 'Speaking.' : 'Nothing to say.' }
   }).catch(($, e, next) => ({ result: `interccom could not speak: ${errorText(next.error)}` }))
 
@@ -295,8 +308,18 @@ export const register: Register = (on, opts) => {
     if (e.props.hasSurvey || !currentLink()) return next(e)
     const { Box, Button, Text } = $.ui.resolve(e)
     const failed = (what: string) => (err: unknown) => $.ui.toast(`interccom: couldn't ${what} (${errorText(err).slice(0, 120)})`)
+    if (!isPowered()) {
+      return h(Box, { flexDirection: 'row', gap: 1 },
+        h(Text, { dimColor: true }, 'interccom: Off'),
+        h(Button, {
+          key: 'power', label: 'Turn on', variant: 'primary',
+          onPress: () => setPower($, true).catch(failed('turn interccom on')),
+        })) as RenderElement
+    }
+    const wave = currentWave()
     return h(Box, { flexDirection: 'row', gap: 1 },
       h(Text, { dimColor: true }, `interccom: ${currentStatus()}`),
+      wave ? h(Text, { key: 'wave', color: 'success' }, wave) : null,
       isTalking() && h(Button, {
         key: 'stop', label: 'Stop', variant: 'primary',
         onPress: () => stopTalking($).catch(failed('stop')),
@@ -304,6 +327,10 @@ export const register: Register = (on, opts) => {
       h(Button, {
         key: 'mic', label: isMicPaused() ? 'Mic on' : 'Mic off',
         onPress: () => toggleMic($).catch(failed('switch the mic')),
+      }),
+      h(Button, {
+        key: 'power', label: 'Turn off',
+        onPress: () => setPower($, false).catch(failed('turn interccom off')),
       })) as RenderElement
   }).catch(($, e, next) => next(e))
 
@@ -319,7 +346,7 @@ export const register: Register = (on, opts) => {
     if (below.decision) return below // the person's own PermissionRequest hooks decided
     const toolUseId = takeEligible(e.tool_name, e.tool_input)
     const id = currentLink()?.sessionId
-    if (!toolUseId || !id || !isMicOn() || isMuted(options)) return below
+    if (!toolUseId || !id || !isPowered() || !isMicOn() || isMuted(options)) return below
     const call = (method: string, path: string, body?: unknown) => hubCall($, method, path, body)
     const answer = await askByVoice($, call, id, e.tool_name, e.tool_input, toolUseId, next.signal)
     if (answer === 'approved') return { ...below, decision: { behavior: 'allow' as const } }

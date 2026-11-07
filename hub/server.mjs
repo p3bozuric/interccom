@@ -30,6 +30,7 @@ const HOST_EVENTS = new Set(['session-start', 'prompt', 'tool', 'stop'])
 const APPROVAL_WAIT_MAX_MS = 10_000 // one long-poll; the session asks again until its own timeout
 const APPROVAL_STALE_MS = 10 * 60_000 // a request whose session stopped asking is dropped
 const APPROVAL_KEEP_MS = 60_000 // an answer waits this long for the session's next poll
+const LEVEL_MS = 120 // the bar's sound wave: at most this often while the person speaks
 
 // Words only, lower case: "Use port 8080!" and "use port 8080" are the same quote.
 export function normWords(s) {
@@ -113,6 +114,11 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
   let approvalSeq = 0
   const voice = { playing: false, speaking: false, transcribing: 0 }
   let lastCue = 'waiting'
+  let lastSpeaking = false
+  let lastLevelAt = 0
+  // interccom switched off (the bar's Turn off, /interccom off): no listening, no speech, no
+  // voice approvals. Sessions stay linked so Turn on is instant. A new hub starts on.
+  let powered = true
   const tokenBuf = Buffer.from(String(token))
 
   const player = createPlayer({
@@ -142,11 +148,40 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
     return 'waiting'
   }
 
+  // `speaking` rides along so the bar can draw a sound wave only while the voice comes in
+  // (listening also covers the quiet seconds after "Hey Claude").
   function refreshCue() {
     const state = cueState()
-    if (state === lastCue) return
+    if (state === lastCue && voice.speaking === lastSpeaking) return
     lastCue = state
-    broadcast({ type: 'cue', state })
+    lastSpeaking = voice.speaking
+    broadcast({ type: 'cue', state, speaking: voice.speaking })
+  }
+
+  // The voice's loudness while it comes in, 0..1, at most every LEVEL_MS: the bar's sound wave.
+  function level(v) {
+    const t = now()
+    if (!voice.speaking || !powered || t - lastLevelAt < LEVEL_MS) return
+    lastLevelAt = t
+    broadcast({ type: 'level', v: Math.round(Math.min(1, Math.max(0, Number(v) || 0)) * 100) / 100 })
+  }
+
+  function setPower(on) {
+    if (on === powered) return { on }
+    powered = on
+    if (!on) {
+      stop()
+      for (const a of [...approvals.values()]) settleApproval(a, 'cancelled')
+    }
+    broadcast({ type: 'power', on })
+    // The listener reads the effective listen mode: off while interccom is off.
+    notifyConfig()
+    return { on }
+  }
+
+  // The config as the listener and player see it: interccom off means the mic is off too.
+  function effectiveConfig() {
+    return powered ? { ...config } : { ...config, listenMode: 'off' }
   }
 
   function arm(until) {
@@ -253,6 +288,7 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
   }
 
   async function hear(text) {
+    if (!powered) return
     if (approvals.size && answerApproval(text)) return
     const coord = liveCoordinator()
     const r = route(String(text ?? ''), {
@@ -401,7 +437,7 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
 
   function notifyConfig() {
     for (const cb of configListeners) {
-      try { cb({ ...config }) } catch (err) { reportError(err) }
+      try { cb(effectiveConfig()) } catch (err) { reportError(err) }
     }
   }
 
@@ -422,6 +458,7 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
     send(res, { type: 'hello', sessionId: id, name: row.name })
     // The mic may have started before this session opened its stream.
     send(res, { type: 'mic', state: micState })
+    if (!powered) send(res, { type: 'power', on: false })
     // Keepalive: Node's fetch drops a response body that stays quiet for 300 s.
     const ping = setInterval(() => send(res, { type: 'ping' }), pingMs)
     ping.unref?.()
@@ -447,6 +484,7 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
       return {
         sessions: board.list().map(publicRow),
         mode: config.listenMode,
+        power: powered,
         playing: player.isPlaying(),
         coordinator: liveCoordinator()?.name ?? null,
         decisions: board.decisions(),
@@ -473,11 +511,16 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
       return { mode: config.listenMode }
     }
     if (m === 'POST' && path === '/stop') return { flushed: stop() }
+    if (m === 'POST' && path === '/power') {
+      if (typeof body.on !== 'boolean') throw new HttpError(400, 'on must be true or false')
+      return setPower(body.on)
+    }
 
     // Permission prompts by voice: a session opens a request, waits on it in short long-polls
     // while its own dialog stays up, and cancels it when the dialog was answered first.
     if (m === 'POST' && path === '/approvals') {
       const row = session(body.sessionId)
+      if (!powered) throw new HttpError(409, 'interccom is off')
       const tool = String(body.tool ?? '')
       if (!tool) throw new HttpError(400, 'tool is required')
       const a = {
@@ -528,6 +571,7 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
     }
     if (m === 'POST' && path === '/speak') {
       const row = session(body.sessionId)
+      if (!powered) return { queued: false, off: true }
       const priority = PRIORITIES.has(body.priority) ? body.priority : 'status'
       const spoken = toSpeakable(body.text ?? '')
       if (!spoken) return { queued: false }
@@ -635,12 +679,13 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
     reportError,
     broadcast,
     resumePlayer: () => player.resume(),
-    getConfig: () => ({ ...config }),
+    getConfig: effectiveConfig,
     onConfigChange: cb => { configListeners.push(cb) },
     isPlaying: () => player.isPlaying(),
     mutedUntil: () => player.mutedUntil(),
     // From the listener: the person's voice started or stopped; a transcription started (+1) or ended (-1).
     speaking: on => { voice.speaking = Boolean(on); refreshCue() },
+    level,
     transcribing: delta => { voice.transcribing = Math.max(0, voice.transcribing + delta); refreshCue() },
   }
 }
