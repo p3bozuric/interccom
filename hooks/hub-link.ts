@@ -29,6 +29,10 @@ let wantCoordinator = false
 let setupChecked = false // the first-run check runs once per session
 let mic: Mic = 'not connected'
 let cue = 'waiting'
+let powered = true // false while interccom is switched off (the bar's Turn off)
+let speaking = false // the person's voice is coming in right now
+const levels: number[] = [] // its recent loudness, 0..1, newest last: the bar's sound wave
+const WAVE_WIDTH = 8
 // A name the person gave (/interccom name, /rename): kept when the link restarts.
 let chosenName = ''
 export const voiceTag = makeTag()
@@ -146,12 +150,32 @@ export function isMicPaused(): boolean {
   return mic === 'paused'
 }
 
+export function isPowered(): boolean {
+  return powered
+}
+
 export function currentStatus(): string {
-  return micStatus(mic, cue)
+  return powered ? micStatus(mic, cue) : 'Off'
+}
+
+// A little sound wave from recent loudness, newest on the right: "▁▂▅▇▆▃▁▁".
+export function waveText(values: readonly number[], width = WAVE_WIDTH): string {
+  const bars = '▁▂▃▄▅▆▇█'
+  const recent = values.slice(-width)
+  const padded = [...Array(Math.max(0, width - recent.length)).fill(0), ...recent]
+  return padded.map(v => bars[Math.round(Math.min(1, Math.max(0, v)) * (bars.length - 1))]).join('')
+}
+
+// The bar's wave while the person speaks, or '' when they don't. Scaled to the loudest recent
+// level (never below 0.3, so near-silence stays flat): a quiet voice still draws a shape.
+export function currentWave(): string {
+  if (!powered || !speaking) return ''
+  const peak = Math.max(0.3, ...levels)
+  return waveText(levels.map(v => v / peak))
 }
 
 function showMic($: EngineInterface): void {
-  $.ui.status(micStatus(mic, cue))
+  $.ui.status(currentStatus())
 }
 
 async function deliverHeard($: EngineInterface, text: string): Promise<void> {
@@ -170,6 +194,8 @@ async function handleLine($: EngineInterface, line: string): Promise<void> {
       name: String(msg.name ?? ''),
     }
     linkedAt = Date.now()
+    // A new hub starts on; a hub that is off says so on the event stream.
+    powered = true
     // A new registration starts idle, as a worker, on the hub: bring it up to date.
     reportBusy($, delivery.isBusy())
     // A name chosen while the link was starting (the session's title arrives at about the same time).
@@ -196,8 +222,20 @@ async function handleLine($: EngineInterface, line: string): Promise<void> {
     $.ui.invalidate('ui.render')
   } else if (msg.type === 'cue') {
     cue = String(msg.state ?? 'waiting')
+    speaking = msg.speaking === true
+    if (!speaking) levels.length = 0
     showMic($)
     // The band above the prompt shows the same word, and Stop while it talks.
+    $.ui.invalidate('ui.render')
+  } else if (msg.type === 'level') {
+    if (!speaking) return
+    levels.push(Number(msg.v) || 0)
+    if (levels.length > WAVE_WIDTH) levels.shift()
+    $.ui.invalidate('ui.render')
+  } else if (msg.type === 'power') {
+    powered = msg.on !== false
+    if (!powered) { speaking = false; levels.length = 0 }
+    showMic($)
     $.ui.invalidate('ui.render')
   } else if (msg.type === 'error') {
     toastError($, String(msg.message ?? 'unknown error'))

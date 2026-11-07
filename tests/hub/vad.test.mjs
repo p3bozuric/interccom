@@ -69,3 +69,16 @@ test('reset keeps the learned noise floor', () => {
   for (let i = 0; i < 60; i++) got = fresh.push(silence()) || got
   assert.ok(got)
 })
+
+test('level: 0 at the speech threshold, rising on a log scale to 1 at 16 times it', () => {
+  // A fixed threshold of 1000 (above 3x the learned floor), so the scale is easy to check.
+  const vad = createVad({ minThreshold: 1000 })
+  vad.push(silence())
+  assert.equal(vad.level(), 0)
+  vad.push(tone(1000 * Math.SQRT2)) // RMS of a sine is amplitude / sqrt(2): exactly the threshold
+  assert.ok(vad.level() < 0.05)
+  vad.push(tone(1000 * 4 * Math.SQRT2))
+  assert.ok(Math.abs(vad.level() - 0.5) < 0.05)
+  vad.push(tone(30000))
+  assert.equal(vad.level(), 1)
+})

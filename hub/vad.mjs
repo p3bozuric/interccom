@@ -16,6 +16,8 @@ export function createVad(opts = {}) {
   let preroll = []
   let segment = null // { frames, loud, quiet }
   let loudRun = 0
+  let lastLevel = 0
+  let lastThreshold = o.minThreshold
 
   function reset() {
     // The learned noise floor survives: it describes the room, not the utterance.
@@ -26,7 +28,10 @@ export function createVad(opts = {}) {
 
   function push(frame) {
     const level = rms(frame)
-    const loud = level > Math.max(floor * 3, o.minThreshold)
+    const threshold = Math.max(floor * 3, o.minThreshold)
+    lastLevel = level
+    lastThreshold = threshold
+    const loud = level > threshold
 
     if (!segment) {
       if (!loud) floor = floor * 0.98 + level * 0.02
@@ -50,5 +55,9 @@ export function createVad(opts = {}) {
   // True from the first loud frames of an utterance until it ends.
   const active = () => segment !== null
 
-  return { push, reset, active }
+  // The last frame's loudness, 0 at the speech threshold up to 1 at 16 times it (log scale):
+  // what the bar's sound wave draws.
+  const level = () => Math.min(1, Math.max(0, Math.log2(lastLevel / lastThreshold) / 4))
+
+  return { push, reset, active, level }
 }

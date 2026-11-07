@@ -109,7 +109,8 @@ Claude Code asks which engines to use for talking and listening. Add the API key
 
 - **Talk:** start with the wake word, "Hey Claude, …". You can also say "Hey Claude", pause, and then talk within 10 seconds.
 - **Address a session:** "Hey Claude, *api*: what's failing?" A session is named after its title's first three words (`/rename Session #3` makes it `session-3`, said "session three"), or after its folder when it has no title. `/interccom name <name>` sets one directly.
-- **The bar above the prompt:** shows what it's doing (Talking, Listening, Processing, Waiting, Not connected, Mic off), with **Mic off/on**, and **Stop** while it talks. Use these mid-turn: Claude Code holds typed commands like `/interccom stop` and `/listen` until its turn ends.
+- **The bar above the prompt:** shows what it's doing (Talking, Listening, Processing, Waiting, Not connected, Mic off, Off), a little sound wave while your voice comes in, **Mic off/on**, **Turn off/on**, and **Stop** while it talks. Use these mid-turn: Claude Code holds typed commands like `/interccom stop` and `/listen` until its turn ends.
+- **Turn off** (or `/interccom off`) switches interccom off for every session: no listening, no speech, no voice approvals. Sessions stay connected, so **Turn on** (or `/interccom on`) is instant. A restarted hub starts on.
 - **Chimes:** a rising one when it catches "Hey Claude", a falling one when your words reach a session.
 - **Stop it talking:** the **Stop** button, or `/interccom stop` when Claude isn't working. Saying "Hey Claude, stop" works between sentences, not while audio is playing.
 - **See all sessions:** `/interccom status`.
