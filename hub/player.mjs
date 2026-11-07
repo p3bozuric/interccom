@@ -1,5 +1,7 @@
 // Takes one item at a time off the talk queue: TTS, then playback.
 // Never runs two plays at once. stop() aborts the current item.
+// An item may carry settle(outcome): 'playing' when its sound starts, or 'failed' with the
+// error, or 'dropped' (muted or stopped), so whoever queued it can tell whether it was heard.
 export function createPlayer({ queue, engines, audio, getConfig, onError, boardSize, now, board, startPaused = false, onPlaying = () => {} }) {
   let paused = startPaused
   let running = false
@@ -7,8 +9,9 @@ export function createPlayer({ queue, engines, audio, getConfig, onError, boardS
   let mutedUntil = 0
 
   async function playItem(item) {
+    const settle = (outcome, error) => { try { item.settle?.(outcome, error) } catch { /* the caller is gone */ } }
     const cfg = getConfig()
-    if (cfg.muted) return
+    if (cfg.muted) { settle('dropped'); return }
     const ac = new AbortController()
     current = ac
     try {
@@ -17,9 +20,10 @@ export function createPlayer({ queue, engines, audio, getConfig, onError, boardS
       // The coordinator speaks for everyone, so it never announces itself.
       const text = boardSize() > 1 && name && row?.role !== 'coordinator' ? `${name}: ${item.text}` : item.text
       const mp3 = await engines.tts(text, cfg)
-      if (ac.signal.aborted) return
+      if (ac.signal.aborted) { settle('dropped'); return }
       // The mic is deaf while audio plays: tell the person, from the first sound to the last.
       onPlaying(true)
+      settle('playing')
       try {
         await audio.play(mp3, ac.signal)
       } finally {
@@ -28,7 +32,8 @@ export function createPlayer({ queue, engines, audio, getConfig, onError, boardS
       if (ac.signal.aborted) return
       board?.setLastLine(item.sessionId, item.text, now())
     } catch (err) {
-      if (!ac.signal.aborted) onError(err)
+      if (ac.signal.aborted) settle('dropped')
+      else { settle('failed', String(err?.message ?? err)); onError(err) }
     } finally {
       current = null
       mutedUntil = now() + 400

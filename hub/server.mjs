@@ -31,6 +31,7 @@ const APPROVAL_WAIT_MAX_MS = 10_000 // one long-poll; the session asks again unt
 const APPROVAL_STALE_MS = 10 * 60_000 // a request whose session stopped asking is dropped
 const APPROVAL_KEEP_MS = 60_000 // an answer waits this long for the session's next poll
 const LEVEL_MS = 120 // the bar's sound wave: at most this often while the person speaks
+const SPEAK_WAIT_MAX_MS = 8000 // /speak with wait: how long it may hold the answer for the outcome
 
 // Words only, lower case: "Use port 8080!" and "use port 8080" are the same quote.
 export function normWords(s) {
@@ -584,9 +585,18 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
         return { queued: true, spoken, relayed: true }
       }
       if (row.role !== 'coordinator') board.setQuestion(row.sessionId, priority === 'question' ? spoken : '', t)
-      queue.push({ sessionId: row.sessionId, name: row.name, text: spoken, priority })
+      // With wait (ms), answer once the sound starts or the voice engine fails, so a session never
+      // says it spoke when nothing played. Behind other speech, or slow, it answers 'pending'.
+      const wait = Math.min(SPEAK_WAIT_MAX_MS, Math.max(0, Number(body.wait) || 0))
+      let settle
+      const outcome = wait ? new Promise(r => { settle = (o, error) => r({ outcome: o, ...(error ? { error } : {}) }) }) : null
+      queue.push({ sessionId: row.sessionId, name: row.name, text: spoken, priority, ...(settle ? { settle } : {}) })
       player.kick()
-      return { queued: true, spoken }
+      if (!outcome) return { queued: true, spoken }
+      let timer
+      const result = await Promise.race([outcome, new Promise(r => { timer = setTimeout(() => r({ outcome: 'pending' }), wait) })])
+      clearTimeout(timer)
+      return { queued: true, spoken, ...result }
     }
 
     if (m === 'POST' && (path === '/board/resolve' || path === '/board/decision')) {

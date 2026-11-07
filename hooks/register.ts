@@ -65,6 +65,22 @@ async function setPower($: EngineInterface, on: boolean): Promise<void> {
   await hubCall($, 'POST', '/power', { on })
 }
 
+const SPEAK_WAIT_MS = 4000 // how long speak waits to learn whether the sound started
+
+type SpeakOut = { queued?: unknown; off?: unknown; relayed?: unknown; outcome?: unknown; error?: unknown }
+
+// What the model is told after speak. Never "Speaking." unless it's playing or still on its way:
+// when the voice engine fails, the person heard nothing and has to get it in text.
+export function speakResult(out: SpeakOut): string {
+  if (out.off) return 'interccom is switched off; nothing played. Answer in text.'
+  if (!out.queued) return 'Nothing to say.'
+  if (out.relayed) return 'Passed to the coordinator, which speaks for every session.'
+  if (out.outcome === 'failed') return `Not spoken: ${String(out.error ?? 'the voice engine failed')} The person didn't hear it; say it in your text reply.`
+  if (out.outcome === 'dropped') return 'Not spoken: playback was stopped or muted. Say it in your text reply.'
+  if (out.outcome === 'pending') return 'Queued; it plays after the speech ahead of it.'
+  return 'Speaking.'
+}
+
 let resumeMode: 'wake' | 'always' = 'wake' // what "Mic on" goes back to
 
 // Mic off is /listen off; Mic on goes back to the mode it had (wake unless it was always).
@@ -187,7 +203,7 @@ export const register: Register = (on, opts) => {
     await $.tool.register({
       name: 'speak',
       description:
-        'Say something out loud to the person: a short spoken summary, conclusion, or question (1-3 plain sentences, no code or markdown). Returns immediately; audio plays in the background, one voice for all sessions.',
+        'Say something out loud to the person: a short spoken summary, conclusion, or question (1-3 plain sentences, no code or markdown). Returns once the sound starts (a few seconds at most), or says why nothing played; one voice for all sessions.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -284,9 +300,8 @@ export const register: Register = (on, opts) => {
     const priority: Priority = PRIORITIES.includes(raw as Priority) ? (raw as Priority) : 'status'
     const id = currentLink()?.sessionId
     if (!id) return { result: 'interccom is not connected to the hub yet; nothing played.' }
-    const out = (await hubCall($, 'POST', '/speak', { sessionId: id, text, priority })) as { queued?: unknown; off?: unknown }
-    if (out.off) return { result: 'interccom is switched off; nothing played. Answer in text.' }
-    return { result: out.queued ? 'Speaking.' : 'Nothing to say.' }
+    const out = (await hubCall($, 'POST', '/speak', { sessionId: id, text, priority, wait: SPEAK_WAIT_MS })) as SpeakOut
+    return { result: speakResult(out) }
   }).catch(($, e, next) => ({ result: `interccom could not speak: ${errorText(next.error)}` }))
 
   on('tool.call', { tool: 'mcp__interccom__board' }, async ($, e) => boardTool($, e as BoardInput))

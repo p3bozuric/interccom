@@ -946,3 +946,35 @@ test('turning interccom off cancels open voice approvals', async () => {
   await call('POST', '/power', { on: false })
   assert.equal((await call('GET', `/approvals/${req.id}`)).json.status, 'cancelled')
 })
+
+test('speak with wait: answers playing once the sound starts, failed with the engine error, pending behind other speech', async () => {
+  const g = gate()
+  let fail = false
+  const engines = { tts: async text => { if (fail) throw new Error("Couldn't reach the local speech server at http://127.0.0.1:8880/v1/audio/speech. Check that it is running."); return Buffer.from(text) }, stt: async () => '' }
+  const { call, register } = await start({ engines, audio: fakeAudio(g) })
+  const { sessionId } = await register('api')
+  const first = (await call('POST', '/speak', { sessionId, text: 'one', wait: 2000 })).json
+  assert.equal(first.outcome, 'playing')
+  // 'one' is still playing (the gate is shut): 'two' waits its turn.
+  const second = (await call('POST', '/speak', { sessionId, text: 'two', wait: 100 })).json
+  assert.equal(second.outcome, 'pending')
+  g.open()
+  await waitFor(async () => !(await call('GET', '/board')).json.playing)
+  fail = true
+  const third = (await call('POST', '/speak', { sessionId, text: 'three', wait: 2000 })).json
+  assert.equal(third.outcome, 'failed')
+  assert.match(third.error, /Couldn't reach the local speech server/)
+  // Without wait it answers at once, as before.
+  assert.deepEqual(Object.keys((await call('POST', '/speak', { sessionId, text: 'four' })).json).sort(), ['queued', 'spoken'])
+})
+
+test('speak with wait: speech cleared by Stop answers dropped', async () => {
+  const g = gate()
+  const { call, register } = await start({ audio: fakeAudio(g) })
+  const { sessionId } = await register('api')
+  await call('POST', '/speak', { sessionId, text: 'one', wait: 2000 })
+  const pendingTwo = call('POST', '/speak', { sessionId, text: 'two', wait: 3000 })
+  await tick(50)
+  await call('POST', '/stop', {})
+  assert.equal((await pendingTwo).json.outcome, 'dropped')
+})
