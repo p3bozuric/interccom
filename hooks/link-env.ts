@@ -4,6 +4,11 @@ export function isMuted(opts: Record<string, unknown>): boolean {
   return opts.muted === true || opts.muted === 'true'
 }
 
+// Dictation (the dictation setting): heard speech starts out typed into the prompt box.
+export function isDictation(opts: Record<string, unknown>): boolean {
+  return opts.dictation === true || opts.dictation === 'true'
+}
+
 export function baseName(dir: string): string {
   const parts = dir.split(/[\\/]+/).filter(Boolean)
   return parts[parts.length - 1] ?? 'session'
@@ -12,7 +17,7 @@ export function baseName(dir: string): string {
 // Plugin settings the hub uses. Each reaches connect.mjs as INTERCCOM_<NAME> (see hub/config-env.mjs).
 export const HUB_SETTINGS = [
   'tts_engine', 'stt_engine', 'tts_voice', 'tts_model', 'stt_model', 'stt_language', 'listen_mode',
-  'local_tts_url', 'local_stt_url', 'tts_command', 'stt_command',
+  'local_tts_url', 'local_stt_url', 'tts_command', 'stt_command', 'tts_fallback',
   'deepgram_api_key', 'soniox_api_key', 'openai_api_key', 'groq_api_key', 'cartesia_api_key',
 ] as const
 

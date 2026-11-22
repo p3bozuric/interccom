@@ -978,3 +978,36 @@ test('speak with wait: speech cleared by Stop answers dropped', async () => {
   await call('POST', '/stop', {})
   assert.equal((await pendingTwo).json.outcome, 'dropped')
 })
+
+test('a failed talking engine falls back to the system voice: heard, and the person told what failed', async () => {
+  const down = () => { throw Object.assign(new Error("Couldn't reach the local speech server."), { code: 'network' }) }
+  const engines = { tts: async () => down(), stt: async () => '', canFallBack: cfg => cfg.ttsFallback !== 'off', fallbackTts: async text => Buffer.from(`system:${text}`) }
+  const audio = fakeAudio()
+  const { call, register, open } = await start({ engines, audio })
+  const { sessionId } = await register('api')
+  const s = await open(sessionId)
+  assert.equal((await call('POST', '/speak', { sessionId, text: 'hello', wait: 2000 })).json.outcome, 'playing')
+  await waitFor(() => audio.played.length === 1)
+  assert.equal(audio.played[0], 'system:hello')
+  await waitFor(() => s.raw.some(m => m.type === 'error' && /local speech server/.test(m.message)))
+  // Off: silence, and speak says why.
+  await call('POST', '/config', { ttsFallback: 'off' })
+  const off = (await call('POST', '/speak', { sessionId, text: 'again', wait: 2000 })).json
+  assert.equal(off.outcome, 'failed')
+  assert.match(off.error, /local speech server/)
+  // A value that isn't system or off is ignored.
+  await call('POST', '/config', { ttsFallback: 'loud' })
+  assert.equal((await call('POST', '/speak', { sessionId, text: 'third', wait: 2000 })).json.outcome, 'failed')
+})
+
+test('when the system voice fails too, both reasons are given', async () => {
+  const engines = {
+    tts: async () => { throw new Error('No ElevenLabs API key.') }, stt: async () => '',
+    canFallBack: () => true, fallbackTts: async () => { throw new Error('The system voice needs espeak-ng.') },
+  }
+  const { call, register } = await start({ engines })
+  const { sessionId } = await register('api')
+  const out = (await call('POST', '/speak', { sessionId, text: 'hello', wait: 2000 })).json
+  assert.equal(out.outcome, 'failed')
+  assert.equal(out.error, 'No ElevenLabs API key. The system voice failed too: The system voice needs espeak-ng.')
+})

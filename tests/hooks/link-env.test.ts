@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { baseName, linkEnv, isMuted } from '../../hooks/link-env.ts'
+import { baseName, linkEnv, isMuted, isDictation } from '../../hooks/link-env.ts'
 
 test('linkEnv maps every option', () => {
   assert.deepEqual(linkEnv({
@@ -65,10 +65,17 @@ test('linkEnv passes engines, models, local servers, commands and every provider
 test('every hub-facing setting in plugin.json reaches the hub env', async () => {
   const { readFileSync } = await import('node:fs')
   const manifest = JSON.parse(readFileSync(new URL('../../.claude-plugin/plugin.json', import.meta.url), 'utf8'))
-  const sessionOnly = new Set(['autonomy', 'autonomy_rules'])
+  const sessionOnly = new Set(['autonomy', 'autonomy_rules', 'dictation'])
   for (const key of Object.keys(manifest.userConfig)) {
     if (sessionOnly.has(key)) continue
     const env = linkEnv({ [key]: key === 'muted' ? true : 'x' })
     assert.ok(Object.keys(env).length > 1 || key === 'muted', `${key} is not passed to the hub`)
   }
+})
+
+test('isDictation: the dictation setting, true or "true" only; off by default', () => {
+  assert.equal(isDictation({ dictation: true }), true)
+  assert.equal(isDictation({ dictation: 'true' }), true)
+  assert.equal(isDictation({ dictation: 'yes' }), false)
+  assert.equal(isDictation({}), false)
 })

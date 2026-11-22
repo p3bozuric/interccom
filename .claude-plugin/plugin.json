@@ -1,6 +1,6 @@
 {
   "name": "interccom",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "One voice for all your Claude Code sessions: hear conclusions and questions, talk back hands-free.",
   "license": "MIT",
   "author": { "name": "interccom contributors", "url": "https://github.com/p3bozuric/interccom" },
@@ -10,7 +10,7 @@
     "tts_engine": {
       "type": "string",
       "title": "Talking: speech engine",
-      "description": "Who turns Claude's words into speech. Cloud: elevenlabs, deepgram, soniox, openai, cartesia. On your machine: local (a server with the OpenAI audio API, e.g. Kokoro-FastAPI) or command (a program, e.g. Piper).",
+      "description": "Who turns Claude's words into speech. Cloud: elevenlabs, deepgram, soniox, openai, cartesia. On your machine: local (a server with the OpenAI audio API, e.g. Kokoro-FastAPI) or command (a program, e.g. Piper). No setup: system (your computer's own voice).",
       "options": [
         "elevenlabs",
         "deepgram",
@@ -18,7 +18,8 @@
         "openai",
         "cartesia",
         "local",
-        "command"
+        "command",
+        "system"
       ],
       "required": true
     },
@@ -120,6 +121,16 @@
       "description": "For stt_engine local: base URL of your OpenAI-compatible transcription server, ending in /v1 (Speaches: http://127.0.0.1:8000/v1).",
       "default": "http://127.0.0.1:8000/v1"
     },
+    "tts_fallback": {
+      "type": "string",
+      "title": "When the talking engine fails",
+      "description": "system: say it with your computer's own voice instead (Windows speech, macOS say, Linux espeak-ng), and still tell you what failed. off: stay silent.",
+      "default": "system",
+      "options": [
+        "system",
+        "off"
+      ]
+    },
     "tts_command": {
       "type": "string",
       "title": "TTS command",
@@ -136,6 +147,12 @@
       "type": "boolean",
       "title": "Muted",
       "description": "Keep the speak tool but play nothing.",
+      "default": false
+    },
+    "dictation": {
+      "type": "boolean",
+      "title": "Dictation",
+      "description": "Put what you say into the prompt box for you to edit and send, instead of sending it. Each session's Dictate button above the prompt switches it.",
       "default": false
     },
     "autonomy": {

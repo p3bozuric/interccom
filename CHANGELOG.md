@@ -10,6 +10,7 @@ The version is the same in `package.json`, `.claude-plugin/plugin.json` and `.co
 
 ## 0.7.0
 
+- **A system voice.** New talking engine `system`: your computer's own voice (Windows speech, macOS `say`, Linux `espeak-ng`), with no key and no server. It's also the fallback when the chosen voice fails, so you still hear the line and are told what failed. `tts_fallback = off` keeps silence.
 - **Dictation.** The bar's **Dictate** button, `/interccom dictate`, or the `dictation` setting: what a session hears goes into its prompt box for you to edit and send. Off by default.
 - **The wave, drawn.** In the desktop app, the bar's sound wave is drawn like the desktop's own dictation meter. Terminals keep the text wave.
 - **Turn off / Turn on** in the bar (and `/interccom off|on`): no listening, no speech, no voice approvals, for every session.

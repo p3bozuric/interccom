@@ -22,6 +22,7 @@ export const SETTINGS = {
   local_tts_url: 'localTtsUrl',
   local_stt_url: 'localSttUrl',
   tts_command: 'ttsCommand',
+  tts_fallback: 'ttsFallback',
   stt_command: 'sttCommand',
 }
 // Older names still honoured.

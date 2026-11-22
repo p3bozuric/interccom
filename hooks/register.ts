@@ -3,11 +3,12 @@ import { guidance, coordinatorGuidance, normalizeAutonomy } from './guidance.ts'
 import {
   startLink, hubCall, currentLink, setLinkName, reportBusy, delivery, voiceTag,
   currentRole, requestRole, deliverReports, isTalking, isMicPaused, isMicOn, currentStatus, linkReady, HubRefusal,
-  isPowered, currentWave,
+  isPowered, currentLevels, isDictating, setDictating,
 } from './hub-link.ts'
+import { waveSvg, waveText } from './wave.ts'
 import { rememberCheck, takeEligible, askByVoice } from './approvals.ts'
 import { boardText, type BoardData } from './board-view.ts'
-import { baseName, isMuted } from './link-env.ts'
+import { baseName, isDictation, isMuted } from './link-env.ts'
 
 // interccom, the session side. Claude gets a `speak` tool whose text goes to the hub,
 // which plays one voice for every session in priority order. What the person says
@@ -115,7 +116,7 @@ async function followTitle($: EngineInterface, title: unknown): Promise<void> {
 }
 
 async function interccomCommand($: EngineInterface, args: string): Promise<{ text: string }> {
-  const usage = { text: 'Usage: /interccom setup [test] | name <name> | status | stop | on | off | coordinator [take] | worker' }
+  const usage = { text: 'Usage: /interccom setup [test] | name <name> | status | stop | on | off | dictate [on|off] | coordinator [take] | worker' }
   const trimmed = args.trim()
   const [sub = '', ...rest] = trimmed.split(/\s+/)
   if (sub.toLowerCase() === 'name') {
@@ -159,6 +160,16 @@ async function interccomCommand($: EngineInterface, args: string): Promise<{ tex
   }
   if (sub.toLowerCase() === 'stop') {
     return { text: `Stopped. Cleared ${await stopTalking($)} queued updates.` }
+  }
+  if (sub.toLowerCase() === 'dictate') {
+    const arg = (rest[0] ?? '').toLowerCase()
+    const on = arg === 'on' ? true : arg === 'off' ? false : !isDictating()
+    setDictating($, on)
+    return {
+      text: on
+        ? 'Dictating: what this session hears goes into the prompt box for you to edit and send. /interccom dictate off sends it again.'
+        : 'Not dictating: what this session hears is sent to Claude again.',
+    }
   }
   if (sub.toLowerCase() === 'off' || sub.toLowerCase() === 'on') {
     const on = sub.toLowerCase() === 'on'
@@ -245,10 +256,11 @@ export const register: Register = (on, opts) => {
     })
     await $.command.register({
       name: 'interccom',
-      description: 'interccom: check the speech setup, rename this session, list every session, stop playback, switch interccom on or off, or make this session the coordinator.',
-      argumentHint: 'setup [test] | name <name> | status | stop | on | off | coordinator [take] | worker',
+      description: 'interccom: check the speech setup, rename this session, list every session, stop playback, switch interccom on or off, dictate into the prompt box, or make this session the coordinator.',
+      argumentHint: 'setup [test] | name <name> | status | stop | on | off | dictate [on|off] | coordinator [take] | worker',
       immediate: true,
     })
+    setDictating($, isDictation(options))
     startLink($, options, e.cwd)
     return started
   })
@@ -331,10 +343,16 @@ export const register: Register = (on, opts) => {
           onPress: () => setPower($, true).catch(failed('turn interccom on')),
         })) as RenderElement
     }
-    const wave = currentWave()
-    return h(Box, { flexDirection: 'row', gap: 1 },
-      h(Text, { dimColor: true }, `interccom: ${currentStatus()}`),
-      wave ? h(Text, { key: 'wave', color: 'success' }, wave) : null,
+    // The wave while the person speaks: drawn on surfaces with Svg, bars of text on the terminal.
+    const levels = currentLevels()
+    const els = $.ui.resolve(e)
+    const wave = !levels ? null
+      // The terminal's table may still hold Svg as a fragment that draws nothing: ask the surface.
+      : e.surface !== 'terminal' && 'Svg' in els ? h(els.Svg, { key: 'wave', source: waveSvg(levels), alt: 'Your voice is coming in' })
+      : h(Text, { key: 'wave', color: 'success' }, waveText(levels))
+    return h(Box, { flexDirection: 'row', gap: 1, alignItems: 'center' },
+      h(Text, { dimColor: true }, `interccom: ${currentStatus()}${isDictating() ? ' · dictating' : ''}`),
+      ...(wave ? [wave] : []),
       isTalking() && h(Button, {
         key: 'stop', label: 'Stop', variant: 'primary',
         onPress: () => stopTalking($).catch(failed('stop')),
@@ -342,6 +360,10 @@ export const register: Register = (on, opts) => {
       h(Button, {
         key: 'mic', label: isMicPaused() ? 'Mic on' : 'Mic off',
         onPress: () => toggleMic($).catch(failed('switch the mic')),
+      }),
+      h(Button, {
+        key: 'dictate', label: isDictating() ? 'Stop dictating' : 'Dictate',
+        onPress: () => setDictating($, !isDictating()),
       }),
       h(Button, {
         key: 'power', label: 'Turn off',

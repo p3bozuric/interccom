@@ -109,7 +109,8 @@ Claude Code asks which engines to use for talking and listening. Add the API key
 
 - **Talk:** start with the wake word, "Hey Claude, …". You can also say "Hey Claude", pause, and then talk within 10 seconds.
 - **Address a session:** "Hey Claude, *api*: what's failing?" A session is named after its title's first three words (`/rename Session #3` makes it `session-3`, said "session three"), or after its folder when it has no title. `/interccom name <name>` sets one directly.
-- **The bar above the prompt:** shows what it's doing (Talking, Listening, Processing, Waiting, Not connected, Mic off, Off), a little sound wave while your voice comes in, **Mic off/on**, **Turn off/on**, and **Stop** while it talks. Use these mid-turn: Claude Code holds typed commands like `/interccom stop` and `/listen` until its turn ends.
+- **The bar above the prompt:** shows what it's doing (Talking, Listening, Processing, Waiting, Not connected, Mic off, Off), a sound wave while your voice comes in (drawn in the desktop app, bars of text in a terminal), **Mic off/on**, **Dictate**, **Turn off/on**, and **Stop** while it talks. Use these mid-turn: Claude Code holds typed commands like `/interccom stop` and `/listen` until its turn ends.
+- **Dictate** (or `/interccom dictate`, or the `dictation` setting to start every session that way): what that session hears goes into its prompt box, at the cursor, for you to edit and send yourself. Off by default: normally your words are sent. "Approve", "deny" and "Hey Claude, stop" still work while dictating.
 - **Turn off** (or `/interccom off`) switches interccom off for every session: no listening, no speech, no voice approvals. Sessions stay connected, so **Turn on** (or `/interccom on`) is instant. A restarted hub starts on.
 - **Chimes:** a rising one when it catches "Hey Claude", a falling one when your words reach a session.
 - **Stop it talking:** the **Stop** button, or `/interccom stop` when Claude isn't working. Saying "Hey Claude, stop" works between sentences, not while audio is playing.
@@ -163,6 +164,9 @@ Talking (`tts_engine`) and listening (`stt_engine`) are chosen separately. Mix t
 | `cartesia` | ✓ | | `cartesia_api_key` / `CARTESIA_API_KEY` | `sonic-3`. Set `tts_voice` to your Cartesia voice ID. |
 | `local` | ✓ | ✓ | none | your server's models (`kokoro` / `af_heart`, `Systran/faster-whisper-small`) |
 | `command` | ✓ | ✓ | none | your program |
+| `system` | ✓ | | none | your computer's own voice: Windows speech, macOS `say`, Linux `espeak-ng` |
+
+**When the talking engine fails** (no key, a local server that's down, a provider outage), interccom says the line with the `system` voice instead, and still tells you what failed. Set `tts_fallback` to `off` to stay silent instead. Linux needs `espeak-ng` installed (`sudo apt install espeak-ng`); Windows and macOS need nothing. `tts_voice` picks a system voice by name when `system` is the chosen engine, e.g. `Microsoft Zira Desktop` or `Samantha`.
 
 **Local models:**
 - **`local`**: any server with the OpenAI audio API (`/v1/audio/speech`, `/v1/audio/transcriptions`), on this machine or your LAN. For example:
@@ -206,6 +210,7 @@ Talking (`tts_engine`) and listening (`stt_engine`) are chosen separately. Mix t
 | `listen_mode` | `wake` | `wake`, `always` or `off`. |
 | `local_tts_url` / `local_stt_url` | `http://127.0.0.1:8880/v1` / `http://127.0.0.1:8000/v1` | For the `local` engines. |
 | `tts_command` / `stt_command` | (empty) | For the `command` engines. |
+| `tts_fallback` | `system` | When the talking engine fails: `system` speaks with your computer's own voice, `off` stays silent. |
 | `muted` | `false` | Keep listening, but play nothing. |
 | `autonomy` | `relay` | What the coordinator may decide alone: `relay`, `routine`, `full`. |
 | `autonomy_rules` | (empty) | Your own rules for the coordinator, in plain words. |
@@ -245,7 +250,6 @@ Set `INTERCCOM_MIC` to a device name to choose a specific microphone; otherwise 
 
 ## Roadmap
 
-- **A voice with no setup:** the operating system's own speech as the default before a key is set, and as the fallback when the chosen engine fails.
 - **A local wake word and voice detection,** so a cloud engine hears only what follows "Hey Claude" ([research](docs/research/2026-11-01-local-wake-word.md)).
 - **A coordinator in agents other than Claude Code** ([proposal](docs/superpowers/plans/2026-11-01-interccom-4-coordinator-in-other-agents.md)), and more agents.
 - **Setup:** a mic picker.

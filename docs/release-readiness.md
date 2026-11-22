@@ -9,7 +9,7 @@ What stands between interccom 0.7 and a release people can install and rely on. 
 | # | Item | Status |
 |---|---|---|
 | 1 | **Tests run on every PR, on Windows, macOS and Linux.** Until now they ran only on one Windows PC. | Done: `.github/workflows/test.yml` (Node 22 and 24 on all three; Node 20 loads every hub module). Whatever the first runs on macOS and Linux turn up still needs fixing. |
-| 2 | **A voice with no setup.** A new user with no key, no local server and no Docker hears nothing, and Claude is told so. Windows speech, macOS `say` and Linux `espeak-ng` need no key. | To do, next: a `system` engine as the default before setup, and as the fallback when the chosen engine fails. |
+| 2 | **A voice with no setup.** A new user with no key, no local server and no Docker heard nothing. | Done: the `system` engine (Windows speech, macOS `say`, Linux `espeak-ng`) and the automatic fallback to it. Checked live on Windows; macOS and Linux only in unit tests. |
 | 3 | **Real macOS and Linux audio.** Capture, playback, device names and permissions have only run under unit tests (testing-locally.md 7c). | Owner, or a tester with a Mac or a Linux PC. |
 | 4 | **Accurate docs.** The README said "early alpha (v0.1)", required Node 18.3, left Gemini out of the intro and setup, and listed a stale roadmap. | Done: README, package description, Node 20 requirement, an Uninstall section, CHANGELOG.md, SECURITY.md. |
 | 5 | **Publishing.** The npm name `interccom` is free. Releases have no git tags or GitHub releases yet. | Owner: `npm publish`, then tag `v0.7.0` and write the GitHub release from CHANGELOG.md. |

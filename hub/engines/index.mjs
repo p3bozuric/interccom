@@ -2,6 +2,7 @@
 //   cloud:  elevenlabs, deepgram, soniox, openai, groq (STT only), cartesia (TTS only)
 //   local:  local   - any server with the OpenAI audio API on this machine or LAN
 //           command - any program (Piper, whisper.cpp's whisper-cli, ...)
+//           system  - the operating system's own voice (TTS only); also the fallback
 // A new provider is one module with tts(text, opts) -> audio Buffer and/or
 // stt(wav, opts) -> text, plus an entry in PROVIDERS.
 import * as elevenlabs from './elevenlabs.mjs'
@@ -10,6 +11,7 @@ import * as command from './command.mjs'
 import * as deepgram from './deepgram.mjs'
 import * as soniox from './soniox.mjs'
 import * as cartesia from './cartesia.mjs'
+import * as system from './system.mjs'
 
 const { EngineError } = elevenlabs
 
@@ -48,6 +50,7 @@ export const PROVIDERS = {
     tts: { model: 'kokoro', voice: 'af_heart' }, stt: { model: 'Systran/faster-whisper-small' },
   },
   command: { label: 'Command', tts: {}, stt: {} },
+  system: { label: 'System voice', tts: { model: '', voice: '' } },
 }
 
 export const ENGINES = new Set(Object.keys(PROVIDERS))
@@ -81,7 +84,7 @@ export function problem(cfg, dir) {
   return ''
 }
 
-export function createEngines({ impl = { elevenlabs, local, command, deepgram, soniox, cartesia }, cwd } = {}) {
+export function createEngines({ impl = { elevenlabs, local, command, deepgram, soniox, cartesia, system }, cwd } = {}) {
   function guard(cfg, dir) {
     const why = problem(cfg, dir)
     if (why) throw new EngineError(why.startsWith('No ') ? 'auth' : 'config', why)
@@ -98,6 +101,7 @@ export function createEngines({ impl = { elevenlabs, local, command, deepgram, s
         case 'deepgram': return impl.deepgram.tts(text, { apiKey: cfg.deepgramKey, model })
         case 'soniox': return impl.soniox.tts(text, { apiKey: cfg.sonioxKey, model, voice, language: lang })
         case 'cartesia': return impl.cartesia.tts(text, { apiKey: cfg.cartesiaKey, model, voice, language: lang })
+        case 'system': return impl.system.tts(text, { voice, cwd })
         default: return impl.elevenlabs.tts(text, { apiKey: cfg.apiKey, voiceId: voice, modelId: model })
       }
     },
@@ -115,6 +119,10 @@ export function createEngines({ impl = { elevenlabs, local, command, deepgram, s
         default: return impl.elevenlabs.stt(wav, { apiKey: cfg.apiKey, model, language })
       }
     },
+    // The system voice, when the chosen talking engine failed: never for the system voice itself,
+    // and not when tts_fallback is off. Its own voice setting belongs to the chosen engine.
+    canFallBack: cfg => resolved(cfg, 'tts').engine !== 'system' && cfg.ttsFallback !== 'off',
+    fallbackTts: text => impl.system.tts(text, { cwd }),
     // Whether listening can work at all: the mic stays off until it can.
     sttReady: cfg => !problem(cfg, 'stt'),
   }

@@ -165,7 +165,7 @@ test('problems name the missing key and where to get it; sttReady follows them',
 })
 
 test('engine lists per direction', () => {
-  assert.deepEqual(TTS_ENGINES, ['elevenlabs', 'deepgram', 'soniox', 'openai', 'cartesia', 'local', 'command'])
+  assert.deepEqual(TTS_ENGINES, ['elevenlabs', 'deepgram', 'soniox', 'openai', 'cartesia', 'local', 'command', 'system'])
   assert.deepEqual(STT_ENGINES, ['elevenlabs', 'deepgram', 'soniox', 'openai', 'groq', 'local', 'command'])
   assert.deepEqual(resolved({}, 'tts'), { engine: 'elevenlabs', model: 'eleven_flash_v2_5', voice: '21m00Tcm4TlvDq8ikWAM' })
 })
@@ -176,4 +176,53 @@ test('audioExt sniffs wav, ogg, flac, else mp3', () => {
   assert.equal(audioExt(Buffer.from('fLaC')), 'flac')
   assert.equal(audioExt(Buffer.from([0xff, 0xfb, 0, 0])), 'mp3')
   assert.equal(audioExt(Buffer.alloc(0)), 'mp3')
+})
+
+// ---- system voice ----
+import * as system from '../../hub/engines/system.mjs'
+import { spawn as realSpawn } from 'node:child_process'
+
+test('system voice: per platform, the text never reaches the command line', () => {
+  const win = system.systemCommand({ platform: 'win32', voice: 'Microsoft Zira Desktop', file: 'C:/t/a.wav' })
+  assert.equal(win.argv[0], 'powershell.exe')
+  assert.equal(win.toFile, true)
+  assert.deepEqual(win.env, { INTERCCOM_SYSTEM_OUT: 'C:/t/a.wav', INTERCCOM_SYSTEM_VOICE: 'Microsoft Zira Desktop' })
+  assert.match(win.argv.at(-1), /\[Console\]::In\.ReadToEnd\(\)/)
+  const mac = system.systemCommand({ platform: 'darwin', voice: 'Samantha', file: '/t/a.wav' })
+  assert.deepEqual(mac.argv, ['say', '-v', 'Samantha', '-o', '/t/a.wav', '--file-format=WAVE', '--data-format=LEI16@22050'])
+  const linux = system.systemCommand({ platform: 'linux', file: '/t/a.wav' })
+  assert.deepEqual(linux.argv, ['espeak-ng', '--stdin', '--stdout'])
+  assert.equal(linux.toFile, false)
+  assert.match(linux.missing, /apt install espeak-ng/)
+})
+
+// Stands in for the platform's program: node, writing a WAV that holds what came on stdin.
+const nodeAs = script => (cmd, args, opts) => realSpawn(process.execPath, ['-e', script], opts)
+const WRITE_FILE = "let t='';process.stdin.on('data',d=>t+=d).on('end',()=>require('fs').writeFileSync(process.env.INTERCCOM_SYSTEM_OUT,'RIFF'+t))"
+const WRITE_STDOUT = "let t='';process.stdin.on('data',d=>t+=d).on('end',()=>process.stdout.write('RIFF'+t))"
+
+test('system voice: the text goes in on stdin, the audio comes back from the file or stdout', async () => {
+  const fromFile = await system.tts('Čekaj, molim.', { platform: 'win32', spawn: nodeAs(WRITE_FILE) })
+  assert.equal(fromFile.toString(), 'RIFFČekaj, molim.')
+  const fromStdout = await system.tts('hello', { platform: 'linux', spawn: nodeAs(WRITE_STDOUT) })
+  assert.equal(fromStdout.toString(), 'RIFFhello')
+  await assert.rejects(system.tts('x', { platform: 'win32', spawn: nodeAs('') }), /produced no audio/)
+})
+
+test('system voice: a platform without the program says what to install', async () => {
+  const missing = (cmd, args, opts) => realSpawn('interccom-no-such-program', [], opts)
+  await assert.rejects(system.tts('x', { platform: 'linux', spawn: missing }),
+    err => err instanceof EngineError && err.code === 'config' && /sudo apt install espeak-ng/.test(err.message))
+})
+
+test('fallback: the system voice backs up every engine but itself, unless tts_fallback is off', async () => {
+  const said = []
+  const e = createEngines({ impl: { system: { tts: async text => { said.push(text); return Buffer.from('RIFF') } } } })
+  assert.equal(e.canFallBack({ ttsEngine: 'local' }), true)
+  assert.equal(e.canFallBack({ ttsEngine: 'local', ttsFallback: 'off' }), false)
+  assert.equal(e.canFallBack({ ttsEngine: 'system' }), false)
+  assert.equal((await e.fallbackTts('hi')).toString(), 'RIFF')
+  assert.equal((await e.tts('as chosen', { ttsEngine: 'system' })).toString(), 'RIFF')
+  assert.deepEqual(said, ['hi', 'as chosen'])
+  assert.equal(problem({ ttsEngine: 'system' }, 'tts'), '', 'no key and no server needed')
 })

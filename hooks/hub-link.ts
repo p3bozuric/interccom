@@ -2,6 +2,7 @@ import type { EngineInterface } from 'claude-code'
 import { createDelivery, heardText, makeTag } from './delivery.ts'
 import { baseName, linkEnv } from './link-env.ts'
 import { BACKOFF_START_MS, restartBackoff } from './backoff.ts'
+import { WAVE_SLOTS, dictationPiece } from './wave.ts'
 
 // The session's link to the hub: runs hub/connect.mjs for as long as the session
 // lives, keeps the hub's port and token from its first line, and turns the hub's
@@ -32,7 +33,9 @@ let cue = 'waiting'
 let powered = true // false while interccom is switched off (the bar's Turn off)
 let speaking = false // the person's voice is coming in right now
 const levels: number[] = [] // its recent loudness, 0..1, newest last: the bar's sound wave
-const WAVE_WIDTH = 8
+// Dictation: what this session hears goes into its prompt box for the person to edit and send,
+// instead of being sent. Off unless the dictation setting or the bar's Dictate turns it on.
+let dictating = false
 // A name the person gave (/interccom name, /rename): kept when the link restarts.
 let chosenName = ''
 export const voiceTag = makeTag()
@@ -158,20 +161,34 @@ export function currentStatus(): string {
   return powered ? micStatus(mic, cue) : 'Off'
 }
 
-// A little sound wave from recent loudness, newest on the right: "▁▂▅▇▆▃▁▁".
-export function waveText(values: readonly number[], width = WAVE_WIDTH): string {
-  const bars = '▁▂▃▄▅▆▇█'
-  const recent = values.slice(-width)
-  const padded = [...Array(Math.max(0, width - recent.length)).fill(0), ...recent]
-  return padded.map(v => bars[Math.round(Math.min(1, Math.max(0, v)) * (bars.length - 1))]).join('')
+// The recent levels while the person speaks, or null when they don't: the bar draws them as a
+// wave. Scaled to the loudest recent level (never below 0.3, so near-silence stays flat): a
+// quiet voice still draws a shape.
+export function currentLevels(): number[] | null {
+  if (!powered || !speaking) return null
+  const peak = Math.max(0.3, ...levels)
+  return levels.map(v => v / peak)
 }
 
-// The bar's wave while the person speaks, or '' when they don't. Scaled to the loudest recent
-// level (never below 0.3, so near-silence stays flat): a quiet voice still draws a shape.
-export function currentWave(): string {
-  if (!powered || !speaking) return ''
-  const peak = Math.max(0.3, ...levels)
-  return waveText(levels.map(v => v / peak))
+export function isDictating(): boolean {
+  return dictating
+}
+
+export function setDictating($: EngineInterface, on: boolean): void {
+  dictating = on
+  $.ui.invalidate('ui.render')
+}
+
+// Dictation: the words go in at the cursor, the person sends them. A box that can't take them
+// (a dialog holds the keys) gets nothing, so the words are shown rather than lost.
+async function dictate($: EngineInterface, text: string): Promise<void> {
+  const box = await $.prompt.read()
+  const piece = dictationPiece(box.text.slice(0, box.cursor), text)
+  if (!piece) return
+  const filled = await $.prompt.fill({ text: piece, mode: 'insert' })
+  if (!filled.isFilled) {
+    $.ui.toast(`interccom couldn't type into the prompt box${filled.refusal === 'dialog' ? ' while a dialog is open' : ''}: ${text.slice(0, 120)}`)
+  }
 }
 
 function showMic($: EngineInterface): void {
@@ -208,7 +225,8 @@ async function handleLine($: EngineInterface, line: string): Promise<void> {
   } else if (msg.type === 'heard') {
     const text = String(msg.text ?? '').trim()
     const addressed = typeof msg.addressed === 'string' ? msg.addressed : undefined
-    if (text) await deliverHeard($, heardText(text, addressed))
+    // Dictating, the words are the person's draft: no "(to …)" for the model, no sending.
+    if (text) await (dictating ? dictate($, text) : deliverHeard($, heardText(text, addressed)))
   } else if (msg.type === 'report') {
     const r = { from: String(msg.from ?? ''), priority: String(msg.priority ?? 'status'), text: String(msg.text ?? '').trim() }
     if (r.text && delivery.report(r) === 'submit') await submitReport($, delivery.formatOne(r))
@@ -230,7 +248,7 @@ async function handleLine($: EngineInterface, line: string): Promise<void> {
   } else if (msg.type === 'level') {
     if (!speaking) return
     levels.push(Number(msg.v) || 0)
-    if (levels.length > WAVE_WIDTH) levels.shift()
+    if (levels.length > WAVE_SLOTS) levels.shift()
     $.ui.invalidate('ui.render')
   } else if (msg.type === 'power') {
     powered = msg.on !== false
