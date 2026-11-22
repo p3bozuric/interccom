@@ -4,6 +4,11 @@ export function isMuted(opts: Record<string, unknown>): boolean {
   return opts.muted === true || opts.muted === 'true'
 }
 
+// Dictation (the dictation setting): heard speech starts out typed into the prompt box.
+export function isDictation(opts: Record<string, unknown>): boolean {
+  return opts.dictation === true || opts.dictation === 'true'
+}
+
 export function baseName(dir: string): string {
   const parts = dir.split(/[\\/]+/).filter(Boolean)
   return parts[parts.length - 1] ?? 'session'

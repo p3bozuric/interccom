@@ -1,6 +1,6 @@
 {
   "name": "interccom",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "One voice for all your Claude Code sessions: hear conclusions and questions, talk back hands-free.",
   "license": "MIT",
   "userConfig": {
@@ -133,6 +133,12 @@
       "type": "boolean",
       "title": "Muted",
       "description": "Keep the speak tool but play nothing.",
+      "default": false
+    },
+    "dictation": {
+      "type": "boolean",
+      "title": "Dictation",
+      "description": "Put what you say into the prompt box for you to edit and send, instead of sending it. Each session's Dictate button above the prompt switches it.",
       "default": false
     },
     "autonomy": {
