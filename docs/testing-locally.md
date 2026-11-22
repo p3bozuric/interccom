@@ -157,7 +157,8 @@ Set it in `/plugin` → interccom → configure, then restart the coordinator se
 | # | Do | Expect |
 |---|---|---|
 | 6.1 | Use a key with only Text to Speech | One toast naming the missing permission (`speech_to_text`) and the fix, once a minute at most. Speaking still works. |
-| 6.2 | Remove the key entirely, then ask Claude to speak | The mic stays off (`mic: off`). When Claude speaks, one toast says which key is missing, the setting and variable to set, and where to get one. |
+| 6.2 | Remove the key entirely, then ask Claude to speak | The mic stays off (`mic: off`). When Claude speaks you hear it in your computer's own voice, and one toast says which key is missing, the setting and variable to set, and where to get one. With `tts_fallback` = `off`: silence, the same toast, and `speak` answers "Not spoken: …". |
+| 6.4 | Choose `tts_engine` = `system` | Speech in your computer's own voice with no key and no server. |
 | 6.3b | Use a wrong key for Deepgram, Soniox, OpenAI, Groq or Cartesia | One toast: "<Provider> rejected the API key (401). Check <provider>_api_key (or <PROVIDER>_API_KEY)." |
 | 6.3 | Unplug the mic | "No microphone found …" once. Plug it back in and restart the session; listening resumes. |
 

@@ -18,8 +18,9 @@ const PRIORITIES = new Set(['question', 'heads-up', 'status'])
 const MODES = new Set(['wake', 'always', 'off'])
 const CONFIG_FIELDS = [
   ...KEY_FIELDS, 'voiceId', 'ttsModel', 'sttModel', 'sttLanguage', 'listenMode', 'muted',
-  'ttsEngine', 'sttEngine', 'localTtsUrl', 'localSttUrl', 'ttsCommand', 'sttCommand',
+  'ttsEngine', 'sttEngine', 'localTtsUrl', 'localSttUrl', 'ttsCommand', 'sttCommand', 'ttsFallback',
 ]
+const TTS_FALLBACKS = new Set(['system', 'off'])
 const ERROR_WINDOW_MS = 60_000
 const MAX_BODY = 1 << 20
 const NONCE = /^[0-9a-f]{1,128}$/i
@@ -100,6 +101,8 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
     localSttUrl: 'http://127.0.0.1:8000/v1',
     ttsCommand: '',
     sttCommand: '',
+    // When the talking engine fails: speak with the system voice instead ('system') or not ('off').
+    ttsFallback: 'system',
   }
   let listenSticky = false
   const recentHeard = [] // { at, norm }: what the person said to the coordinator, for relay checks
@@ -431,6 +434,7 @@ export function createHub({ token, engines, audio, now = Date.now, idleExitMs = 
         if (listenSticky || !MODES.has(v)) continue
       }
       if (k === 'ttsEngine' && !TTS_ENGINES.includes(v)) continue
+      if (k === 'ttsFallback' && !TTS_FALLBACKS.has(v)) continue
       if (k === 'sttEngine' && !STT_ENGINES.includes(v)) continue
       config[k] = String(v)
     }
