@@ -116,6 +116,8 @@ Use a session in the default permission mode, so commands ask. Keep the mic on.
 | 3b.6 | Two sessions asking at once; say "yes" | Nothing: two are open. "approve <name>" picks one. |
 | 3b.7 | Say nothing for a minute | The request is withdrawn; the dialog still waits for you. |
 | 3b.8 | `/listen off` (Mic off), then trigger a prompt | No announcement; the dialog only. |
+| 3b.10 | Press **Turn off** in the bar, then trigger a prompt | The bar reads `interccom: Off [Turn on]` in every session. No announcement, the dialog only; `speak` answers "interccom is switched off". **Turn on** brings back listening and speech. |
+| 3b.11 | Talk with the mic on | A short green wave (`▁▃▆█▅▂`) moves in the bar while your voice comes in and disappears when you stop. |
 | 3b.9 | With a coordinator: a worker asks for permission | The coordinator can mention it (`board`) but your "approve" goes to the request, never to the coordinator. |
 
 ## 4. Coordinator: role and routing

@@ -91,7 +91,11 @@ test('tools/call: speak reports problems and failures as tool errors, never prot
   const link = fakeLink({ call: async (...a) => { calls.push(a); return { queued: true } }, lastError: () => 'no key' })
   assert.deepEqual(await callTool(link, 'speak', { text: 'Done.', priority: 'bogus' }),
     { content: [{ type: 'text', text: 'Speaking. Last interccom problem: no key' }] })
-  assert.deepEqual(calls[0], ['POST', '/speak', { sessionId: 'S', text: 'Done.', priority: 'status' }])
+  assert.deepEqual(calls[0], ['POST', '/speak', { sessionId: 'S', text: 'Done.', priority: 'status', wait: 4000 }])
+  // A voice engine that failed is a tool error: the person heard nothing.
+  const failed = await callTool(fakeLink({ call: async () => ({ queued: true, outcome: 'failed', error: "Couldn't reach the local speech server." }) }), 'speak', { text: 'x' })
+  assert.equal(failed.isError, true)
+  assert.match(failed.content[0].text, /^Not spoken: Couldn't reach the local speech server. The person didn't hear it/)
   assert.equal((await callTool(link, 'speak', { text: '  ' })).content[0].text, 'Nothing to say.')
   assert.equal((await callTool(fakeLink({ sessionId: () => '' }), 'speak', { text: 'x' })).isError, true)
   const boom = await handleMessage({ jsonrpc: '2.0', id: 9, method: 'tools/call', params: { name: 'speak', arguments: { text: 'x' } } },

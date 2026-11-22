@@ -16,11 +16,12 @@ export const PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05']
 const PRIORITIES = ['question', 'heads-up', 'status']
 // Hosts whose hooks drain the hub's inbox. Everything else is speak-only for now.
 const PULL_HOSTS = new Set(['codex', 'gemini'])
+const SPEAK_WAIT_MS = 4000 // how long speak waits to learn whether the sound started
 
 export const TOOLS = [
   {
     name: 'speak',
-    description: 'Say something out loud to the person: a short spoken summary, conclusion, or question (1-3 plain sentences, no code or markdown). Returns immediately; audio plays in the background, one voice for all sessions.',
+    description: 'Say something out loud to the person: a short spoken summary, conclusion, or question (1-3 plain sentences, no code or markdown). Returns once the sound starts (a few seconds at most), or says why nothing played; one voice for all sessions.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -170,9 +171,15 @@ export async function callTool(link, toolName, args = {}) {
     const id = link.sessionId()
     if (!id) return text(`interccom is not connected to the hub yet; nothing played.${link.lastError() ? ` (${link.lastError()})` : ''}`, true)
     const priority = PRIORITIES.includes(args.priority) ? args.priority : 'status'
-    const out = await link.call('POST', '/speak', { sessionId: id, text: said, priority })
+    const out = await link.call('POST', '/speak', { sessionId: id, text: said, priority, wait: SPEAK_WAIT_MS })
+    if (out.off) return text('interccom is switched off; nothing played. Answer in text.')
+    if (!out.queued) return text('Nothing to say.')
+    if (out.relayed) return text('Passed to the coordinator, which speaks for every session.')
+    if (out.outcome === 'failed') return text(`Not spoken: ${out.error ?? 'the voice engine failed'} The person didn't hear it; say it in your text reply.`, true)
+    if (out.outcome === 'dropped') return text('Not spoken: playback was stopped or muted. Say it in your text reply.')
+    if (out.outcome === 'pending') return text('Queued; it plays after the speech ahead of it.')
     const problem = link.lastError() ? ` Last interccom problem: ${link.lastError()}` : ''
-    return text(out.queued ? `Speaking.${problem}` : 'Nothing to say.')
+    return text(`Speaking.${problem}`)
   }
   if (toolName === 'board') {
     const b = await link.call('GET', '/board')

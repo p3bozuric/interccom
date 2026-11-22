@@ -462,3 +462,16 @@ test('backoff resets only after 5 s of continuous audio, not on any data', async
   assert.equal(sp.calls.length, 4)
   l.stop()
 })
+
+test('onLevel reports loudness only while the person speaks', async () => {
+  const levels = []
+  const { sp, l } = setup({ onLevel: v => levels.push(v) })
+  for (let i = 0; i < 20; i++) sp.children[0].stdout.write(Buffer.alloc(960))
+  await flush()
+  assert.equal(levels.length, 0, 'silence: no level')
+  for (const f of utteranceFrames()) sp.children[0].stdout.write(f)
+  await flush()
+  assert.ok(levels.length > 0)
+  assert.ok(levels.every(v => v >= 0 && v <= 1))
+  l.stop()
+})

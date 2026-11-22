@@ -18,7 +18,12 @@ export class TalkQueue {
 
   flush() {
     const before = this.#items.length
-    this.#items = this.#items.filter(i => i.priority === 'question')
+    const kept = []
+    for (const i of this.#items) {
+      if (i.priority === 'question') kept.push(i)
+      else try { i.settle?.('dropped') } catch { /* the caller is gone */ }
+    }
+    this.#items = kept
     return before - this.#items.length
   }
 

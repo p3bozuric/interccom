@@ -13,7 +13,7 @@ const NO_MIC = 'No microphone found. Plug one in, or set INTERCCOM_MIC to its na
 
 export function startListener({
   mic, spawn = realSpawn, vad, isMuted, onUtterance, onError, backoffMs = [2000, 30000],
-  captureArgv = platformCapture, onSpeaking = () => {}, onLive = () => {},
+  captureArgv = platformCapture, onSpeaking = () => {}, onLive = () => {}, onLevel = () => {},
 }) {
   const [minBackoff, maxBackoff] = backoffMs
   let child = null
@@ -50,6 +50,7 @@ export function startListener({
       if (pcm) onUtterance(pcm)
     }
     setSpeaking(Boolean(vad.active?.()))
+    if (speaking && vad.level) onLevel(vad.level())
     pending = Buffer.from(pending.subarray(off))
   }
 
@@ -178,6 +179,7 @@ export function createListenerManager({
       onUtterance,
       onError: msg => { hub.broadcast({ type: 'mic', state: 'off' }); hub.reportError(msg) },
       onSpeaking: on => hub.speaking?.(on),
+      onLevel: v => hub.level?.(v),
       // Listening only once audio actually arrives: a mic that fails to start is "not connected".
       onLive: () => hub.broadcast({ type: 'mic', state: 'listening', name: mic }),
     })
