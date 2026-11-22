@@ -1,8 +1,10 @@
 {
   "name": "interccom",
   "version": "0.6.0",
-  "description": "One voice for all your coding agents (Claude Code, Codex, GitHub Copilot CLI, OpenCode): hear conclusions and questions, talk back hands-free.",
+  "description": "One voice for all your coding agents (Claude Code, Codex, GitHub Copilot CLI, OpenCode, Gemini CLI): hear conclusions and questions, talk back hands-free.",
   "license": "MIT",
+  "author": "interccom contributors (https://github.com/p3bozuric/interccom)",
+  "bugs": "https://github.com/p3bozuric/interccom/issues",
   "type": "module",
   "repository": {
     "type": "git",
@@ -17,6 +19,7 @@
     "copilot",
     "deepgram",
     "elevenlabs",
+    "gemini",
     "groq",
     "kokoro",
     "mcp",
@@ -31,7 +34,7 @@
     "whisper"
   ],
   "engines": {
-    "node": ">=18.3"
+    "node": ">=20"
   },
   "bin": {
     "interccom": "hub/cli.mjs"
@@ -44,6 +47,8 @@
     ".codex-plugin/",
     "hosts/",
     "README.md",
+    "CHANGELOG.md",
+    "SECURITY.md",
     "LICENSE"
   ],
   "scripts": {

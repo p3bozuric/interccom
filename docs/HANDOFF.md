@@ -1,5 +1,7 @@
 # Handoff: work done in the cloud session (2026-11-01)
 
+> **Historical.** This records the move from the cloud session to a real PC. For where things stand now, see [CHANGELOG.md](../CHANGELOG.md) and [release-readiness.md](release-readiness.md).
+
 Branch `ccr-874bfdbe-ieq0ah`, 7 commits on top of `f0a0f1d` (v0.1.0), now **v0.4.0**. Everything is tested in the cloud (240 tests, `claude plugin validate .` passes). **Nothing has run on a real PC with a real mic, speakers or a signed-in agent yet.** That is the next step, in [testing-locally.md](testing-locally.md).
 
 ## Start here (local session)
@@ -101,12 +103,7 @@ The full list is in testing-locally.md §8.
 
 ## Known gaps and next steps
 
-- Saying "stop" doesn't interrupt audio while it plays: the mic is deaf during playback, by design.
-- Hooks-module types (`claude-code`) weren't available in the cloud, so the TypeScript in `hooks/` has never been type-checked. The validator accepts it.
-- Next on the roadmap:
-  - other agents (Aider, Cursor CLI, …);
-  - a coordinator in agents other than Claude Code;
-  - a local wake-word/VAD model;
-
-  - `npm publish`.
+- Saying "stop" doesn't interrupt audio while it plays: the mic is deaf during playback, by design. The **Stop** button above the prompt does.
+- The hooks have been type-checked against Claude Code's API since 0.5.0.
+- What's left before a production release: [release-readiness.md](release-readiness.md).
 - Design and plans: `docs/superpowers/specs/` (original design, other agents) and `docs/superpowers/plans/`.
