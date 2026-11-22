@@ -117,7 +117,9 @@ Use a session in the default permission mode, so commands ask. Keep the mic on.
 | 3b.7 | Say nothing for a minute | The request is withdrawn; the dialog still waits for you. |
 | 3b.8 | `/listen off` (Mic off), then trigger a prompt | No announcement; the dialog only. |
 | 3b.10 | Press **Turn off** in the bar, then trigger a prompt | The bar reads `interccom: Off [Turn on]` in every session. No announcement, the dialog only; `speak` answers "interccom is switched off". **Turn on** brings back listening and speech. |
-| 3b.11 | Talk with the mic on | A short green wave (`▁▃▆█▅▂`) moves in the bar while your voice comes in and disappears when you stop. |
+| 3b.11 | Talk with the mic on | A wave moves in the bar while your voice comes in and disappears when you stop: grey rounded bars with dots in the desktop app, green `▁▃▆█▅▂` in a terminal. |
+| 3b.12 | Press **Dictate**, then "Hey Claude, fix the login bug", then "Hey Claude, and add a test" | The bar reads `· dictating`. Both lines land in the prompt box, one space apart, and nothing is sent. Edit and press Enter yourself. **Stop dictating** sends speech again. |
+| 3b.13 | Dictate while Claude is working | The words go into the box for your next message; the running turn gets no voice note. |
 | 3b.9 | With a coordinator: a worker asks for permission | The coordinator can mention it (`board`) but your "approve" goes to the request, never to the coordinator. |
 
 ## 4. Coordinator: role and routing
