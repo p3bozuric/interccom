@@ -26,3 +26,12 @@ test('Codex plugin manifest points at files that exist, and its hooks run the CL
   assert.equal(read('package.json').name, 'interccom')
   assert.equal(read('package.json').bin.interccom, 'hub/cli.mjs')
 })
+
+test('release files: the changelog has the current version, and every packaged path exists', async () => {
+  const { readFileSync, existsSync } = await import('node:fs')
+  const root = new URL('../', import.meta.url)
+  const pkg = JSON.parse(readFileSync(new URL('package.json', root), 'utf8'))
+  assert.match(readFileSync(new URL('CHANGELOG.md', root), 'utf8'), new RegExp(`^## ${pkg.version.replace(/\./g, '\.')}$`, 'm'))
+  for (const p of pkg.files) assert.ok(existsSync(new URL(p, root)), `${p} is in package.json files but missing`)
+  assert.equal(pkg.engines.node, '>=20')
+})

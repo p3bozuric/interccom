@@ -4,13 +4,13 @@
 
 **Talk to your coding agents. Let them talk back.**
 
-interccom gives your coding agents a voice and ears: Claude Code, Codex, GitHub Copilot CLI and OpenCode. The agent says out loud only what you need to hear: conclusions, questions, heads-ups. It never reads out reasoning, code or file paths. You answer by just talking. No push-to-talk, no Enter key, and you can do it while Claude is mid-task.
+interccom gives your coding agents a voice and ears: Claude Code, Codex, GitHub Copilot CLI, OpenCode and Gemini CLI. The agent says out loud only what you need to hear: conclusions, questions, heads-ups. It never reads out reasoning, code or file paths. You answer by just talking. No push-to-talk, no Enter key, and you can do it while Claude is mid-task.
 
 Run several sessions at once and they share one voice channel. They take turns, each says its name, and you can address one by name: *"Hey Claude, frontend: run the tests."* Or make one session the **coordinator**: you talk only to it, and it keeps track of the others for you.
 
 Speech can run in the cloud (ElevenLabs, Deepgram, Soniox, OpenAI, Groq, Cartesia) or entirely on your machine (any OpenAI-compatible local speech server, or programs such as Piper and whisper.cpp).
 
-> **Status: early alpha (v0.1).** Tested on Windows. macOS and Linux support is new and still needs testing on real machines. See the roadmap below.
+> **Status: beta (0.7).** Used daily on Windows with Claude Code. The test suite runs on Windows, macOS and Linux, but macOS and Linux audio, and the Codex, Copilot CLI, OpenCode and Gemini CLI integrations, still need more real-world use. Please [report what breaks](https://github.com/p3bozuric/interccom/issues). See [CHANGELOG.md](CHANGELOG.md) for what changed.
 
 ## How it works
 
@@ -86,7 +86,7 @@ Gemini can't be started from outside, so speech heard while it's idle waits and 
 ## Requirements
 
 - Claude Code (with plugin support)
-- Node.js 18.3 or newer, on PATH
+- Node.js 20 or newer, on PATH
 - `ffmpeg` on PATH, plus `ffplay` on Windows and Linux (macOS plays through its built-in `afplay`):
   - Windows: `winget install Gyan.FFmpeg`
   - macOS: `brew install ffmpeg`. Allow your terminal to use the microphone when macOS asks.
@@ -191,7 +191,7 @@ Talking (`tts_engine`) and listening (`stt_engine`) are chosen separately. Mix t
   - the microphone state.
 
   `/interccom setup test` plays a test line. A session that starts with something missing tells you once, and points to `/interccom setup`.
-- **Codex, Copilot CLI, OpenCode:** run `interccom setup` in a terminal.
+- **Codex, Copilot CLI, OpenCode, Gemini CLI:** run `interccom setup` in a terminal.
   - It asks for both engines, plus model, voice, language and listening mode, and saves them to `~/.interccom/config.json`.
   - For each missing key it shows the `setx` or `export` line to set.
   - It then runs the same check. Flags skip the questions: `interccom setup --tts deepgram --stt soniox --language hr`. Also `--show` and `--test`.
@@ -242,10 +242,17 @@ Set `INTERCCOM_MIC` to a device name to choose a specific microphone; otherwise 
 - **"ffplay not found"**: install ffmpeg and make sure it's on PATH.
 - **It cut me off mid-sentence**: about 1.6 seconds of silence ends a message. Pause for less than that, or say "Hey Claude" and pause to arm it first.
 
+## Uninstall
+
+- **Claude Code:** `/plugin` → interccom → uninstall, or `claude plugin uninstall interccom@interccom` in a terminal.
+- **Other agents:** `interccom copilot-setup --remove`, `interccom opencode-setup --remove`, and `interccom gemini-setup --remove` (then `gemini extensions uninstall interccom`). For Codex, remove the plugin, or the entries `interccom codex-setup` printed.
+- **Leftovers:** the hub stops by itself 30 seconds after the last session closes. `~/.interccom` holds its address and token and any `interccom setup` choices; delete it. interccom never stored your API keys there.
+
 ## Roadmap
 
-- **More coding agents:** others hearing too, and a coordinator in agents other than Claude Code ([design](docs/superpowers/specs/2026-11-01-interccom-hosts.md)).
-- **Setup:** a `/interccom setup` guide and a mic picker.
+- **A local wake word and voice detection,** so a cloud engine hears only what follows "Hey Claude" ([research](docs/research/2026-11-01-local-wake-word.md)).
+- **A coordinator in agents other than Claude Code** ([proposal](docs/superpowers/plans/2026-11-01-interccom-4-coordinator-in-other-agents.md)), and more agents.
+- **Setup:** a mic picker.
 - **Claude Code desktop app and phone:** the PC goes quiet when you're on your phone.
 
 ## Development
@@ -257,7 +264,7 @@ claude plugin validate .
 
 Testing on a real Windows PC: [docs/testing-locally.md](docs/testing-locally.md).
 
-The npm package `interccom` (bin `interccom`: `mcp`, `codex-hook`, `codex-setup`, `copilot-setup`, `opencode-setup`) is the hub plus the adapters for agents other than Claude Code. `npm pack --dry-run` shows what it ships.
+The npm package `interccom` (bin `interccom`: `setup`, `mcp`, `codex-hook`, `codex-setup`, `gemini-hook`, `gemini-setup`, `copilot-setup`, `opencode-setup`) is the hub plus the adapters for agents other than Claude Code. It needs Node 20+; the tests need Node 22.6+. CI runs them on Windows, macOS and Linux. `npm pack --dry-run` shows what it ships.
 
 Design and plans live in `docs/superpowers/`. Handoff notes for the current branch: [docs/HANDOFF.md](docs/HANDOFF.md).
 

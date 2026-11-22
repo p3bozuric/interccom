@@ -3,6 +3,9 @@
   "version": "0.7.0",
   "description": "One voice for all your Claude Code sessions: hear conclusions and questions, talk back hands-free.",
   "license": "MIT",
+  "author": { "name": "interccom contributors", "url": "https://github.com/p3bozuric/interccom" },
+  "homepage": "https://github.com/p3bozuric/interccom#readme",
+  "repository": "https://github.com/p3bozuric/interccom",
   "userConfig": {
     "tts_engine": {
       "type": "string",
