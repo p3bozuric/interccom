@@ -7,7 +7,7 @@
     "tts_engine": {
       "type": "string",
       "title": "Talking: speech engine",
-      "description": "Who turns Claude's words into speech. Cloud: elevenlabs, deepgram, soniox, openai, cartesia. On your machine: local (a server with the OpenAI audio API, e.g. Kokoro-FastAPI) or command (a program, e.g. Piper).",
+      "description": "Who turns Claude's words into speech. Cloud: elevenlabs, deepgram, soniox, openai, cartesia. On your machine: local (a server with the OpenAI audio API, e.g. Kokoro-FastAPI) or command (a program, e.g. Piper). No setup: system (your computer's own voice).",
       "options": [
         "elevenlabs",
         "deepgram",
@@ -15,7 +15,8 @@
         "openai",
         "cartesia",
         "local",
-        "command"
+        "command",
+        "system"
       ],
       "required": true
     },
@@ -116,6 +117,16 @@
       "title": "Local STT server URL",
       "description": "For stt_engine local: base URL of your OpenAI-compatible transcription server, ending in /v1 (Speaches: http://127.0.0.1:8000/v1).",
       "default": "http://127.0.0.1:8000/v1"
+    },
+    "tts_fallback": {
+      "type": "string",
+      "title": "When the talking engine fails",
+      "description": "system: say it with your computer's own voice instead (Windows speech, macOS say, Linux espeak-ng), and still tell you what failed. off: stay silent.",
+      "default": "system",
+      "options": [
+        "system",
+        "off"
+      ]
     },
     "tts_command": {
       "type": "string",

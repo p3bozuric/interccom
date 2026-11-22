@@ -8,6 +8,22 @@ export function createPlayer({ queue, engines, audio, getConfig, onError, boardS
   let current = null // AbortController of the item in flight
   let mutedUntil = 0
 
+  // The chosen engine, else the system voice: the person still hears it, and is told (once a
+  // minute, through onError) what failed. When the fallback fails too, both reasons are given.
+  async function synthesize(text, cfg, signal) {
+    try {
+      return await engines.tts(text, cfg)
+    } catch (err) {
+      if (signal.aborted || !engines.canFallBack?.(cfg)) throw err
+      onError(err)
+      try {
+        return await engines.fallbackTts(text)
+      } catch (fallbackErr) {
+        throw new Error(`${err?.message ?? err} The system voice failed too: ${fallbackErr?.message ?? fallbackErr}`)
+      }
+    }
+  }
+
   async function playItem(item) {
     const settle = (outcome, error) => { try { item.settle?.(outcome, error) } catch { /* the caller is gone */ } }
     const cfg = getConfig()
@@ -19,7 +35,7 @@ export function createPlayer({ queue, engines, audio, getConfig, onError, boardS
       const name = row?.name ?? item.name
       // The coordinator speaks for everyone, so it never announces itself.
       const text = boardSize() > 1 && name && row?.role !== 'coordinator' ? `${name}: ${item.text}` : item.text
-      const mp3 = await engines.tts(text, cfg)
+      const mp3 = await synthesize(text, cfg, ac.signal)
       if (ac.signal.aborted) { settle('dropped'); return }
       // The mic is deaf while audio plays: tell the person, from the first sound to the last.
       onPlaying(true)

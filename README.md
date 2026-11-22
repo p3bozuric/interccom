@@ -164,6 +164,9 @@ Talking (`tts_engine`) and listening (`stt_engine`) are chosen separately. Mix t
 | `cartesia` | ✓ | | `cartesia_api_key` / `CARTESIA_API_KEY` | `sonic-3`. Set `tts_voice` to your Cartesia voice ID. |
 | `local` | ✓ | ✓ | none | your server's models (`kokoro` / `af_heart`, `Systran/faster-whisper-small`) |
 | `command` | ✓ | ✓ | none | your program |
+| `system` | ✓ | | none | your computer's own voice: Windows speech, macOS `say`, Linux `espeak-ng` |
+
+**When the talking engine fails** (no key, a local server that's down, a provider outage), interccom says the line with the `system` voice instead, and still tells you what failed. Set `tts_fallback` to `off` to stay silent instead. Linux needs `espeak-ng` installed (`sudo apt install espeak-ng`); Windows and macOS need nothing. `tts_voice` picks a system voice by name when `system` is the chosen engine, e.g. `Microsoft Zira Desktop` or `Samantha`.
 
 **Local models:**
 - **`local`**: any server with the OpenAI audio API (`/v1/audio/speech`, `/v1/audio/transcriptions`), on this machine or your LAN. For example:
@@ -207,6 +210,7 @@ Talking (`tts_engine`) and listening (`stt_engine`) are chosen separately. Mix t
 | `listen_mode` | `wake` | `wake`, `always` or `off`. |
 | `local_tts_url` / `local_stt_url` | `http://127.0.0.1:8880/v1` / `http://127.0.0.1:8000/v1` | For the `local` engines. |
 | `tts_command` / `stt_command` | (empty) | For the `command` engines. |
+| `tts_fallback` | `system` | When the talking engine fails: `system` speaks with your computer's own voice, `off` stays silent. |
 | `muted` | `false` | Keep listening, but play nothing. |
 | `autonomy` | `relay` | What the coordinator may decide alone: `relay`, `routine`, `full`. |
 | `autonomy_rules` | (empty) | Your own rules for the coordinator, in plain words. |

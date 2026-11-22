@@ -46,10 +46,11 @@ export function cleanTranscript(stdout) {
     .trim()
 }
 
-function run(argv, { input, spawn, cwd, timeoutMs, setting }) {
+// Runs one program without a shell: stdin gets `input`, resolves to its stdout.
+export function run(argv, { input, spawn, cwd, timeoutMs, setting, env }) {
   return new Promise((resolve, reject) => {
     const [cmd, ...args] = argv
-    const child = spawn(cmd, args, { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, cwd })
+    const child = spawn(cmd, args, { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, cwd, ...(env ? { env } : {}) })
     const out = []
     let stderr = ''
     let done = false
